@@ -1,0 +1,7 @@
+{
+  "global": {
+    "view": ["admin", "member"],
+    "upload": ["admin"],
+    "admin": ["admin"]
+  }
+}

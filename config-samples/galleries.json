@@ -1,0 +1,12 @@
+[
+  {
+    "name": "welcome",
+    "title": "Welcome",
+    "description": "Sample gallery. Upload your first photos or videos!",
+    "roles": {
+      "view": ["admin", "member"],
+      "upload": ["admin"],
+      "admin": ["admin"]
+    }
+  }
+]
