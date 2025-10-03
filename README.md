@@ -39,6 +39,44 @@ npm run dev
 
 Vite dev server proxies `/api/*` to `http://localhost:8000`.
 
+## Backend endpoints
+Base URL defaults to your PHP server origin (e.g., http://localhost:8000). Paths:
+- POST `/api/login` — body: `{ "username": "", "password": "" }` → `{ token, user }`
+- GET `/api/me` — returns current user info `{ user }` (requires Authorization header)
+- GET `/api/galleries` — returns `{ galleries: [{ name, title, description }] }`
+- GET `/api/galleries/:name/items` — returns `{ gallery, items: [{ name, url, type, size, contentType }] }`
+- POST `/api/galleries/:name/upload` — multipart/form-data with `file` field (requires upload permission)
+
+### Backend configuration (.env)
+Copy `backend-php/.env.example` to `backend-php/.env` and set one of the following connection methods:
+- AZURE_STORAGE_CONNECTION_STRING
+  - Example: `DefaultEndpointsProtocol=https;AccountName=NAME;AccountKey=KEY;EndpointSuffix=core.windows.net`
+- Or specify endpoint + key:
+  - `AZURE_STORAGE_BLOB_ENDPOINT=https://NAME.blob.core.windows.net`
+  - `AZURE_STORAGE_ACCOUNT=NAME`
+  - `AZURE_STORAGE_KEY=...`
+
+Other settings:
+- `AZURE_CONTAINER_CONFIG` (default: config)
+- `AZURE_CONTAINER_DATA` (default: data)
+- `JWT_SECRET` (required; change from default)
+- `JWT_ISSUER` (default: gallerix)
+- `JWT_EXPIRES_IN` (seconds; default: 86400)
+
+Troubleshooting:
+- Error: "Azure storage connection not configured" → Ensure the above env vars are set and your server loads the `.env` (the dev server runs from `backend-php/` and autoloads environment in `public/index.php`). Restart the PHP dev server after changes.
+
+## Frontend runtime configuration
+You can point the React app to any backend without rebuilding by editing `frontend-react/public/gallerix.config.json`:
+
+```
+{
+  "backendUrl": "http://localhost:8000"
+}
+```
+
+If `backendUrl` is empty or missing, the app will call `/api/...` relative to the current origin. In development, Vite proxies `/api` to the local PHP server as defined in `vite.config.js`.
+
 ## Authentication
 - Users authenticate with username/password (password hashes in users.json).
 - Backend returns a JWT; frontend stores it in localStorage.

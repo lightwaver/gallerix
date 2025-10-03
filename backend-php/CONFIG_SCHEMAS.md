@@ -16,6 +16,12 @@ users.json
   }
 ]
 
+Password hash generation (PHP):
+
+```
+php -r "echo password_hash('your-password', PASSWORD_BCRYPT) . PHP_EOL;"
+```
+
 roles.json
 {
   "global": {

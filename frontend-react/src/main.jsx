@@ -41,7 +41,7 @@ function RequireAuth({ children }) {
 createRoot(document.getElementById('root')).render(
   <BrowserRouter>
     <Routes>
-      <Route path="/login" element={<Login onLogin={(u,t)=>{ setAuth(u,t); return <Navigate to="/" replace /> }} />} />
+  <Route path="/login" element={<Login />} />
       <Route path="/" element={<RequireAuth><AppLayout><GalleryList /></AppLayout></RequireAuth>} />
       <Route path="/g/:name" element={<RequireAuth><AppLayout><GalleryView /></AppLayout></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><AppLayout><Settings /></AppLayout></RequireAuth>} />

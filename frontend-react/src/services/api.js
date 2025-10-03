@@ -1,11 +1,30 @@
 import { getToken } from './auth.js'
 
+let runtimeConfigPromise
+async function getRuntimeConfig() {
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = fetch('/gallerix.config.json')
+      .then(r => r.ok ? r.json() : {})
+      .catch(() => ({}))
+  }
+  return runtimeConfigPromise
+}
+
+async function resolveUrl(path) {
+  const cfg = await getRuntimeConfig()
+  const base = cfg.backendUrl || ''
+  if (!base) return path
+  return base.replace(/\/$/, '') + path
+}
+
 async function request(path, opts = {}) {
   const token = getToken()
-  const res = await fetch(path, {
+  const url = await resolveUrl(path)
+  const baseHeaders = opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
+  const res = await fetch(url, {
     ...opts,
     headers: {
-      'Content-Type': opts.body instanceof FormData ? undefined : 'application/json',
+      ...baseHeaders,
       ...(opts.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     }

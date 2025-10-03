@@ -26,7 +26,7 @@ export default function GalleryView() {
   const [uploading, setUploading] = useState(false)
 
   const user = getUser()
-  const canUpload = user?.roles?.includes('admin') || true // fine-grained per-gallery is enforced by API; UI always shows upload to try
+  const canUpload = user?.roles?.includes('admin') // per-gallery permissions are enforced by the API
 
   useEffect(() => {
     api.listItems(name)
