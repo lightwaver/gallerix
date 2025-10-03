@@ -1,0 +1,20 @@
+# General
+.DS_Store
+node_modules/
+dist/
+build/
+.env
+.env.*
+
+# PHP/Composer
+vendor/
+composer.lock
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite
+.vite/

@@ -1,0 +1,17 @@
+{
+  "name": "lightwaver/gallerix-backend",
+  "description": "PHP backend API for Gallerix (Azure Blob + JWT)",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "microsoft/azure-storage-blob": "^1.5",
+    "vlucas/phpdotenv": "^5.6",
+    "firebase/php-jwt": "^6.10",
+    "guzzlehttp/guzzle": "^7.9"
+  },
+  "autoload": {
+    "psr-4": {
+      "Gallerix\\": "src/"
+    }
+  }
+}
