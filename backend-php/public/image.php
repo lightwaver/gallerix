@@ -7,6 +7,18 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
 require __DIR__ . '/../vendor/autoload.php';
+// Basic CORS for media (adjust origins as needed)
+header('Vary: Origin');
+if (isset($_SERVER['HTTP_ORIGIN'])) {
+    header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+    header('Access-Control-Allow-Credentials: true');
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+    header('Access-Control-Allow-Headers: Authorization, Content-Type');
+    header('Access-Control-Allow-Methods: GET, OPTIONS');
+    http_response_code(204);
+    exit;
+}
 
 use Dotenv\Dotenv;
 use Gallerix\AzureClient;

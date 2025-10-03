@@ -45,7 +45,7 @@ class GalleryService
         return null;
     }
 
-    public function listItems(string $galleryName): array
+    public function listItems(string $galleryName, ?string $token = null): array
     {
         $client = $this->azure->getBlobClient();
         $prefix = rtrim($galleryName, '/') . '/';
@@ -53,13 +53,18 @@ class GalleryService
         $opts->setPrefix($prefix);
         $items = [];
         $result = $client->listBlobs($this->dataContainer, $opts);
-        foreach ($result->getBlobs() as $blob) {
+    $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
+    foreach ($result->getBlobs() as $blob) {
             $name = $blob->getName();
             if (str_ends_with($name, '/')) continue; // skip folders
             $file = substr($name, strlen($prefix));
             if ($file === '' || str_contains($file, '/')) continue; // only direct children
             // Serve via auth-protected proxy endpoint image.php
-            $url = '/image.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
+            $path = '/image.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
+            if ($token) {
+                $path .= '&t=' . rawurlencode($token);
+            }
+            $url = $publicBase ? ($publicBase . $path) : $path;
             $mime = $blob->getProperties()->getContentType();
             $type = str_starts_with((string)$mime, 'video') ? 'video' : 'image';
             $items[] = [

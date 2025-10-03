@@ -95,7 +95,7 @@ class Router
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        $items = $this->galleries->listItems($name);
+    $items = $this->galleries->listItems($name, $user['token'] ?? null);
         echo json_encode(['items' => $items, 'gallery' => ['name' => $name, 'title' => $gal['title'] ?? $name]]);
     }
 
