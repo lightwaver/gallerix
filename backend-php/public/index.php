@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+// Prevent warnings/deprecations from polluting JSON responses; log instead
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 require __DIR__ . '/../vendor/autoload.php';
 
 use Gallerix\Router;
@@ -23,6 +28,10 @@ $router = new Router();
 try {
     $router->handle($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);
 } catch (Throwable $e) {
+    error_log('[Gallerix] Unhandled: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Server error', 'details' => $e->getMessage()]);
+    echo json_encode([
+        'error' => 'Server error',
+        'details' => $e->getMessage(),
+    ]);
 }

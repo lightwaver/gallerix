@@ -59,7 +59,8 @@ class Auth
             $decoded = JWT::decode($token, new Key($this->jwtSecret, 'HS256'));
             return [
                 'username' => $decoded->sub ?? 'unknown',
-                'roles' => $decoded->roles ?? []
+                'roles' => $decoded->roles ?? [],
+                'token' => $token,
             ];
         } catch (\Throwable $e) {
             http_response_code(401);

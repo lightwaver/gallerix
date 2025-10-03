@@ -47,6 +47,10 @@ Base URL defaults to your PHP server origin (e.g., http://localhost:8000). Paths
 - GET `/api/galleries/:name/items` — returns `{ gallery, items: [{ name, url, type, size, contentType }] }`
 - POST `/api/galleries/:name/upload` — multipart/form-data with `file` field (requires upload permission)
 
+Media proxy (auth-protected)
+- GET `/image.php?g=<gallery>&f=<filename>` — streams the blob content if the current session is authorized to view the gallery. The login endpoint sets an `HttpOnly` cookie `gallerix_token` used by the proxy.
+  - You can also pass `Authorization: Bearer <token>` or `?t=<token>` for testing.
+
 ### Backend configuration (.env)
 Copy `backend-php/.env.example` to `backend-php/.env` and set one of the following connection methods:
 - AZURE_STORAGE_CONNECTION_STRING
@@ -85,6 +89,17 @@ If `backendUrl` is empty or missing, the app will call `/api/...` relative to th
 ## Uploads
 - Uploads go directly to the `data` container under the selected gallery folder.
 - Backend sets content type if provided by the browser.
+
+Troubleshooting uploads
+- Error details will now include a human-readable cause (e.g., exceeds upload_max_filesize) plus current ini limits.
+- Common causes:
+  - `UPLOAD_ERR_INI_SIZE` or `UPLOAD_ERR_FORM_SIZE` → file too large for server limits
+  - Missing temp dir or disk write error → check server tmp folder and permissions
+- To raise limits during local dev, you can export env vars or use a custom php.ini. Example run with larger limits:
+
+```
+php -d upload_max_filesize=64M -d post_max_size=64M -S 127.0.0.1:8000 -t public
+```
 
 ## Notes
 - This is a minimal MVP. Consider adding thumbnails generation, presigned URLs, pagination, and admin UI to manage users/galleries.

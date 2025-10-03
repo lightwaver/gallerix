@@ -58,7 +58,8 @@ class GalleryService
             if (str_ends_with($name, '/')) continue; // skip folders
             $file = substr($name, strlen($prefix));
             if ($file === '' || str_contains($file, '/')) continue; // only direct children
-            $url = $blob->getUrl();
+            // Serve via auth-protected proxy endpoint image.php
+            $url = '/image.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
             $mime = $blob->getProperties()->getContentType();
             $type = str_starts_with((string)$mime, 'video') ? 'video' : 'image';
             $items[] = [
@@ -74,8 +75,15 @@ class GalleryService
 
     public function upload(string $galleryName, array $file): array
     {
-        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-            throw new \RuntimeException('Upload error: ' . ($file['error'] ?? 'unknown'));
+        $err = $file['error'] ?? UPLOAD_ERR_OK;
+        if ($err !== UPLOAD_ERR_OK) {
+            $msg = $this->uploadErrorToMessage($err);
+            // Add useful limits context
+            $uploadMax = ini_get('upload_max_filesize') ?: 'unknown';
+            $postMax = ini_get('post_max_size') ?: 'unknown';
+            $msg .= sprintf(' (upload_max_filesize=%s, post_max_size=%s, code=%s)', $uploadMax, $postMax, (string)$err);
+            error_log('[Gallerix] Upload failed: ' . $msg);
+            throw new \RuntimeException($msg);
         }
         $client = $this->azure->getBlobClient();
         $blobName = rtrim($galleryName, '/') . '/' . $file['name'];
@@ -84,6 +92,20 @@ class GalleryService
         $content = fopen($file['tmp_name'], 'rb');
         $client->createBlockBlob($this->dataContainer, $blobName, $content, $options);
         return ['ok' => true, 'name' => $file['name']];
+    }
+
+    private function uploadErrorToMessage(int $code): string
+    {
+        return match ($code) {
+            UPLOAD_ERR_INI_SIZE => 'The uploaded file exceeds the server limit (upload_max_filesize)',
+            UPLOAD_ERR_FORM_SIZE => 'The uploaded file exceeds the form MAX_FILE_SIZE directive',
+            UPLOAD_ERR_PARTIAL => 'The uploaded file was only partially uploaded',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder on the server',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk on the server',
+            UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the file upload',
+            default => 'Unknown upload error',
+        };
     }
 
     private function userHasAnyRole(array $user, array $roles): bool

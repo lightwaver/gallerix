@@ -63,6 +63,14 @@ class Router
             echo json_encode(['error' => 'Invalid credentials']);
             return;
         }
+        // Set a cookie for media proxy convenience (HttpOnly to limit XSS)
+        setcookie('gallerix_token', $res['token'], [
+            'expires' => time() + 60 * 60 * 24 * 7,
+            'path' => '/',
+            'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
         echo json_encode($res);
     }
 
