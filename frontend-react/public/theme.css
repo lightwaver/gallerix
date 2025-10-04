@@ -1,0 +1,40 @@
+/* PPOE theme tokens (override these to match official guidelines) */
+:root {
+  /* Primary palette */
+  --ppo-primary: #0057b8; /* placeholder */
+  --ppo-primary-contrast: #ffffff;
+  --ppo-secondary: #ffd100; /* placeholder */
+  --ppo-secondary-contrast: #1a1a1a;
+
+  /* Surfaces */
+  --ppo-bg: #f7f9fc;
+  --ppo-surface: #ffffff;
+  --ppo-surface-2: #f2f4f8;
+  --ppo-border: #e3e8ef;
+
+  /* Content */
+  --ppo-text: #0f172a;
+  --ppo-muted: #475569;
+
+  /* States */
+  --ppo-success: #16a34a;
+  --ppo-warning: #f59e0b;
+  --ppo-danger: #dc2626;
+
+  /* Radius & spacing */
+  --radius: 12px;
+  --gap: 12px;
+  --shadow: 0 6px 24px rgba(0,0,0,0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ppo-bg: #0b1220;
+    --ppo-surface: #0f172a;
+    --ppo-surface-2: #0b1220;
+    --ppo-border: #1f2a44;
+    --ppo-text: #e2e8f0;
+    --ppo-muted: #cbd5e1;
+    --shadow: 0 8px 30px rgba(0,0,0,0.35);
+  }
+}

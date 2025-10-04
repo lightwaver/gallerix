@@ -31,6 +31,10 @@ class Router
             $this->getGalleries();
             return;
         }
+        if ($path === '/api/galleries' && $method === 'POST') {
+            $this->postCreateGallery();
+            return;
+        }
         if (preg_match('#^/api/galleries/([^/]+)/items$#', $path, $m) && $method === 'GET') {
             $this->getGalleryItems($m[1]);
             return;
@@ -86,7 +90,8 @@ class Router
     {
         $user = $this->auth->requireAuth();
         $list = $this->galleries->listGalleriesForUser($user);
-        echo json_encode(['galleries' => $list]);
+        $canCreate = $this->auth->can($user, 'createGallery');
+        echo json_encode(['galleries' => $list, 'canCreate' => $canCreate]);
     }
 
     private function getGalleryItems(string $name): void
@@ -157,5 +162,43 @@ class Router
 
         http_response_code(404);
         echo json_encode(['error' => 'Not found']);
+    }
+
+    private function postCreateGallery(): void
+    {
+        $user = $this->auth->requireAuth();
+        if (!$this->auth->can($user, 'createGallery')) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            return;
+        }
+        $input = json_decode(file_get_contents('php://input') ?: 'null', true) ?: [];
+        $title = trim((string)($input['title'] ?? ''));
+        $name = trim((string)($input['name'] ?? ''));
+        $desc = (string)($input['description'] ?? '');
+        if ($name === '' && $title !== '') {
+            $name = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $title) ?? '');
+            $name = trim($name, '-');
+        }
+        if ($name === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Gallery name or title required']);
+            return;
+        }
+        // Build default roles: include admin and current user's roles
+        $userRoles = $user['roles'] ?? [];
+        $baseRoles = array_values(array_unique(array_merge(['admin'], $userRoles)));
+        $gallery = [
+            'name' => $name,
+            'title' => $title !== '' ? $title : $name,
+            'description' => $desc,
+            'roles' => [
+                'view' => $baseRoles,
+                'upload' => $baseRoles,
+                'admin' => $baseRoles,
+            ],
+        ];
+        $res = $this->admin->upsertGallery($gallery);
+        echo json_encode(['gallery' => $res]);
     }
 }

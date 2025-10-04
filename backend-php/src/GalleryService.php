@@ -65,6 +65,9 @@ class GalleryService
                 $path .= '&t=' . rawurlencode($token);
             }
             $url = $publicBase ? ($publicBase . $path) : $path;
+            $thumbPath = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
+            if ($token) { $thumbPath .= '&t=' . rawurlencode($token); }
+            $thumbUrl = $publicBase ? ($publicBase . $thumbPath) : $thumbPath;
             $mime = $blob->getProperties()->getContentType();
             $type = str_starts_with((string)$mime, 'video') ? 'video' : 'image';
             $items[] = [
@@ -73,6 +76,7 @@ class GalleryService
                 'type' => $type,
                 'size' => $blob->getProperties()->getContentLength(),
                 'contentType' => $mime,
+                'thumbUrl' => $thumbUrl,
             ];
         }
         return $items;

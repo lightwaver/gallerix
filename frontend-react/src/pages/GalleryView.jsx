@@ -3,18 +3,22 @@ import { useParams } from 'react-router-dom'
 import { api } from '../services/api.js'
 import { getUser } from '../services/auth.js'
 import { useDropzone } from 'react-dropzone'
+import { Card, Grid, Button } from '../components/ui.jsx'
+import Lightbox from '../components/Lightbox.jsx'
 
-function Thumb({ item }) {
+function Thumb({ item, onClick }) {
   const isVideo = item.type === 'video'
   return (
-    <div style={{ width: 160, margin: 8, textAlign: 'center' }}>
-      {isVideo ? (
-        <video src={item.url} style={{ width: '100%', height: 120, objectFit: 'cover' }} controls />
-      ) : (
-        <img src={item.url} alt={item.name} style={{ width: '100%', height: 120, objectFit: 'cover' }} />
-      )}
-      <div style={{ fontSize: 12, marginTop: 4 }}>{item.name}</div>
-    </div>
+    <Card>
+      <div onClick={onClick} style={{ cursor:'zoom-in' }}>
+        {isVideo ? (
+          <video src={item.url} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} muted />
+        ) : (
+          <img src={item.thumbUrl || item.url} alt={item.name} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} />
+        )}
+      </div>
+      <div style={{ fontSize: 12, marginTop: 8, color:'var(--ppo-muted)' }}>{item.name}</div>
+    </Card>
   )
 }
 
@@ -24,6 +28,7 @@ export default function GalleryView() {
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [lightboxIdx, setLightboxIdx] = useState(null)
 
   const user = getUser()
   const canUpload = user?.roles?.includes('admin') // per-gallery permissions are enforced by the API
@@ -55,14 +60,28 @@ export default function GalleryView() {
       <h2>{title}</h2>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
       {canUpload && (
-        <div {...getRootProps()} style={{ border: '2px dashed #888', padding: 16, marginBottom: 16, background: isDragActive ? '#f0f8ff' : 'transparent' }}>
-          <input {...getInputProps()} />
-          {uploading ? 'Uploading…' : 'Drag & drop files here, or click to select'}
-        </div>
+        <Card>
+          <div {...getRootProps()} style={{ border: '2px dashed var(--ppo-border)', padding: 16, background: isDragActive ? 'var(--ppo-surface-2)' : 'transparent', borderRadius: 10, textAlign:'center' }}>
+            <input {...getInputProps()} />
+            <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>upload</span>
+            <div>{uploading ? 'Uploading…' : 'Drag & drop files here, or click to select'}</div>
+          </div>
+        </Card>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-        {items.map(it => <Thumb key={it.url} item={it} />)}
+      <div style={{ marginTop: 16 }}>
+        <Grid>
+          {items.map((it, i) => (
+            <Thumb key={it.url} item={it} onClick={() => setLightboxIdx(i)} />
+          ))}
+        </Grid>
       </div>
+      {lightboxIdx !== null && (
+        <Lightbox
+          items={items}
+          startIndex={lightboxIdx}
+          onClose={() => setLightboxIdx(null)}
+        />
+      )}
     </div>
   )
 }

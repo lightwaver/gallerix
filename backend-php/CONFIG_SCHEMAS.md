@@ -27,7 +27,8 @@ roles.json
   "global": {
     "view": ["admin", "member"],
     "upload": ["admin"],
-    "admin": ["admin"]
+    "admin": ["admin"],
+    "createGallery": ["admin"]
   }
 }
 
@@ -44,3 +45,8 @@ galleries.json
     }
   }
 ]
+
+Creating a gallery via API
+- POST /api/galleries with JSON body { "name"?: string, "title"?: string, "description"?: string }
+- Requires a role listed in roles.global.createGallery
+- The created gallery will grant roles to: ["admin"] plus all roles of the current user at time of creation, for view/upload/admin.

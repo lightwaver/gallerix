@@ -13,6 +13,10 @@ export default defineConfig({
       '/image.php': {
         target: 'http://localhost:8000',
         changeOrigin: true
+      },
+      '/thumb.php': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
       }
     }
   }

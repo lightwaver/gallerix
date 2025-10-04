@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { adminApi } from '../services/adminApi.js'
+import { Card, Container, Tabs, Input, TextArea, Button } from '../components/ui.jsx'
 
-function Tabs({ tab, setTab }) {
-  const tabs = ['Users', 'Roles', 'Galleries']
-  return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-      {tabs.map(t => (
-        <button key={t} onClick={() => setTab(t)} style={{ fontWeight: tab === t ? 'bold' : 'normal' }}>{t}</button>
-      ))}
-    </div>
-  )
-}
+function HeaderTabs({ tab, setTab }) { return <Tabs tabs={['Users','Roles','Galleries']} current={tab} onChange={setTab} /> }
 
 function UsersTab() {
   const [users, setUsers] = useState([])
@@ -39,21 +31,24 @@ function UsersTab() {
     <div>
       <h3>Users</h3>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
-      <ul>
+      <Card>
         {users.map(u => (
-          <li key={u.username}>
-            {u.username} — roles: {(u.roles||[]).join(', ')}
-            <button style={{ marginLeft: 8 }} onClick={() => remove(u)}>Delete</button>
-          </li>
+          <div key={u.username} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--ppo-border)' }}>
+            <div>
+              <div style={{ fontWeight:600 }}>{u.username}</div>
+              <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>roles: {(u.roles||[]).join(', ')}</div>
+            </div>
+            <Button variant="outline" icon="delete" onClick={() => remove(u)}>Delete</Button>
+          </div>
         ))}
-      </ul>
-      <form onSubmit={submit} style={{ display: 'grid', gap: 8, maxWidth: 360, marginTop: 12 }}>
-        <input placeholder="username" value={form.username} onChange={e=>setForm(f=>({...f, username:e.target.value}))} />
-        <input placeholder="roles (comma separated)" value={form.roles} onChange={e=>setForm(f=>({...f, roles:e.target.value}))} />
-        <input placeholder="password hash (optional)" value={form.password} onChange={e=>setForm(f=>({...f, password:e.target.value}))} />
-        <button type="submit">Add/Update</button>
+      </Card>
+      <form onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 480, marginTop: 16 }}>
+        <Input label="Username" placeholder="username" value={form.username} onChange={e=>setForm(f=>({...f, username:e.target.value}))} />
+        <Input label="Roles (comma separated)" placeholder="admin,member" value={form.roles} onChange={e=>setForm(f=>({...f, roles:e.target.value}))} />
+        <Input label="Password hash (optional)" placeholder="$2y$..." value={form.password} onChange={e=>setForm(f=>({...f, password:e.target.value}))} />
+        <Button icon="save" type="submit">Add/Update</Button>
       </form>
-      <p style={{ fontSize: 12, color: '#666' }}>Note: passwordHash should be a bcrypt hash. See backend-php/CONFIG_SCHEMAS.md for generating one.</p>
+      <p style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Note: passwordHash should be a bcrypt hash. See backend-php/CONFIG_SCHEMAS.md for generating one.</p>
     </div>
   )
 }
@@ -68,10 +63,14 @@ function RolesTab() {
     <div>
       <h3>Roles</h3>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
-      <pre style={{ background: '#f6f6f6', padding: 8 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setRoles(JSON.parse(e.currentTarget.textContent)) } catch {} }}>
+      <Card>
+        <pre style={{ margin:0 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setRoles(JSON.parse(e.currentTarget.textContent)) } catch {} }}>
 {JSON.stringify(roles, null, 2)}
-      </pre>
-      <button onClick={save}>Save</button>
+        </pre>
+      </Card>
+      <div style={{ marginTop: 12 }}>
+        <Button icon="save" onClick={save}>Save</Button>
+      </div>
     </div>
   )
 }
@@ -88,23 +87,28 @@ function GalleriesTab() {
     <div>
       <h3>Galleries</h3>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
-      <ul>
+      <Card>
         {gals.map(g => (
-          <li key={g.name}>
-            {g.name} — {g.title}
-            <button style={{ marginLeft: 8 }} onClick={() => remove(g)}>Delete</button>
-          </li>
+          <div key={g.name} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--ppo-border)' }}>
+            <div>
+              <div style={{ fontWeight:600 }}>{g.name}</div>
+              <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.title}</div>
+            </div>
+            <Button variant="outline" icon="delete" onClick={() => remove(g)}>Delete</Button>
+          </div>
         ))}
-      </ul>
-      <form onSubmit={submit} style={{ display: 'grid', gap: 8, maxWidth: 420, marginTop: 12 }}>
-        <input placeholder="name" value={form.name} onChange={e=>setForm(f=>({...f, name:e.target.value}))} />
-        <input placeholder="title" value={form.title} onChange={e=>setForm(f=>({...f, title:e.target.value}))} />
-        <input placeholder="description" value={form.description} onChange={e=>setForm(f=>({...f, description:e.target.value}))} />
-        <label>roles JSON</label>
-        <pre style={{ background: '#f6f6f6', padding: 8 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setForm(f=>({...f, roles: JSON.parse(e.currentTarget.textContent)})) } catch {} }}>
+      </Card>
+      <form onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 600, marginTop: 16 }}>
+        <Input label="Name" placeholder="e.g. summer-camp-2025" value={form.name} onChange={e=>setForm(f=>({...f, name:e.target.value}))} />
+        <Input label="Title" placeholder="Summer Camp 2025" value={form.title} onChange={e=>setForm(f=>({...f, title:e.target.value}))} />
+        <TextArea label="Description" placeholder="Description" value={form.description} onChange={e=>setForm(f=>({...f, description:e.target.value}))} />
+        <label style={{ fontSize: 12, color:'var(--ppo-muted)' }}>Roles JSON</label>
+        <Card>
+          <pre style={{ margin:0 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setForm(f=>({...f, roles: JSON.parse(e.currentTarget.textContent)})) } catch {} }}>
 {JSON.stringify(form.roles, null, 2)}
-        </pre>
-        <button type="submit">Add/Update</button>
+          </pre>
+        </Card>
+        <Button icon="save" type="submit">Add/Update</Button>
       </form>
     </div>
   )
@@ -115,7 +119,7 @@ export default function Settings(){
   return (
     <div>
       <h2>Settings</h2>
-      <Tabs tab={tab} setTab={setTab} />
+      <HeaderTabs tab={tab} setTab={setTab} />
       {tab === 'Users' && <UsersTab />}
       {tab === 'Roles' && <RolesTab />}
       {tab === 'Galleries' && <GalleriesTab />}

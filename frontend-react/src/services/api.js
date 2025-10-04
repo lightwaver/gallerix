@@ -42,6 +42,7 @@ export const api = {
   login: (username, password) => request('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   me: () => request('/api/me'),
   listGalleries: () => request('/api/galleries'),
+  createGallery: (payload) => request('/api/galleries', { method: 'POST', body: JSON.stringify(payload) }),
   listItems: (name) => request(`/api/galleries/${encodeURIComponent(name)}/items`),
   upload: (name, file) => {
     const fd = new FormData()
