@@ -15,8 +15,8 @@ function UsersTab() {
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    const payload = { username: form.username.trim(), roles: form.roles.split(',').map(s=>s.trim()).filter(Boolean) }
-    if (form.password) payload.passwordHash = form.password // backend expects hash normally; allow plain for MVP? We'll hash client-side? -> keep explicit
+  const payload = { username: form.username.trim(), roles: form.roles.split(',').map(s=>s.trim()).filter(Boolean) }
+  if (form.password) payload.password = form.password // backend will hash server-side
     try {
       // If password provided, let backend store as-is for MVP users.json (assume prehashed input)
       await adminApi.upsertUser(payload)
@@ -45,10 +45,10 @@ function UsersTab() {
       <form onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 480, marginTop: 16 }}>
         <Input label="Username" placeholder="username" value={form.username} onChange={e=>setForm(f=>({...f, username:e.target.value}))} />
         <Input label="Roles (comma separated)" placeholder="admin,member" value={form.roles} onChange={e=>setForm(f=>({...f, roles:e.target.value}))} />
-        <Input label="Password hash (optional)" placeholder="$2y$..." value={form.password} onChange={e=>setForm(f=>({...f, password:e.target.value}))} />
+  <Input label="Password (optional)" placeholder="Enter new password" value={form.password} type="password" onChange={e=>setForm(f=>({...f, password:e.target.value}))} />
         <Button icon="save" type="submit">Add/Update</Button>
       </form>
-      <p style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Note: passwordHash should be a bcrypt hash. See backend-php/CONFIG_SCHEMAS.md for generating one.</p>
+  <p style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Note: If provided, the password will be securely hashed on the server. Leave blank to keep the existing password unchanged.</p>
     </div>
   )
 }

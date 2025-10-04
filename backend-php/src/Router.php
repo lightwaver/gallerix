@@ -157,7 +157,17 @@ class Router
         if ($path === '/api/admin/galleries' && $method === 'GET') { echo json_encode(['galleries' => $this->admin->listGalleries()]); return; }
         if ($path === '/api/admin/galleries' && ($method === 'POST' || $method === 'PUT')) { echo json_encode(['gallery' => $this->admin->upsertGallery($input)]); return; }
         if (preg_match('#^/api/admin/galleries/([^/]+)$#', $path, $m)) {
-            if ($method === 'DELETE') { $this->admin->deleteGallery(urldecode($m[1])); echo json_encode(['ok' => true]); return; }
+            if ($method === 'DELETE') {
+                $name = urldecode($m[1]);
+                try {
+                    // Clean blobs from storage (data and thumbs)
+                    $this->galleries->deleteGalleryContents($name);
+                } catch (\Throwable $e) {
+                    error_log('[Gallerix] delete gallery contents failed for ' . $name . ': ' . $e->getMessage());
+                }
+                $this->admin->deleteGallery($name);
+                echo json_encode(['ok' => true]); return;
+            }
         }
 
         http_response_code(404);

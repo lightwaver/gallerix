@@ -103,6 +103,37 @@ class GalleryService
         return ['ok' => true, 'name' => $file['name']];
     }
 
+    /**
+     * Delete all blobs for a gallery from data and thumbs containers.
+     */
+    public function deleteGalleryContents(string $galleryName): void
+    {
+        $client = $this->azure->getBlobClient();
+        $thumbsContainer = getenv('AZURE_CONTAINER_THUMBS') ?: 'thumbs';
+        $prefix = rtrim($galleryName, '/') . '/';
+
+        foreach ([$this->dataContainer, $thumbsContainer] as $container) {
+            try {
+                $opts = new ListBlobsOptions();
+                $opts->setPrefix($prefix);
+                $token = null;
+                do {
+                    if ($token) { $opts->setContinuationToken($token); }
+                    $result = $client->listBlobs($container, $opts);
+                    foreach ($result->getBlobs() as $blob) {
+                        $name = $blob->getName();
+                        try { $client->deleteBlob($container, $name); }
+                        catch (\Throwable $e) { error_log('[Gallerix] delete blob failed: ' . $container . '/' . $name . ' - ' . $e->getMessage()); }
+                    }
+                    $token = $result->getContinuationToken();
+                } while ($token);
+            } catch (\Throwable $e) {
+                // Container may not exist or listing failed; log and continue
+                error_log('[Gallerix] list/delete failed for container ' . $container . ': ' . $e->getMessage());
+            }
+        }
+    }
+
     private function uploadErrorToMessage(int $code): string
     {
         return match ($code) {

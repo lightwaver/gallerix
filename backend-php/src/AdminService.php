@@ -11,16 +11,54 @@ class AdminService
     public function listUsers(): array { return $this->config->users(); }
     public function upsertUser(array $user): array {
         $users = $this->config->users();
-        $found = false;
-        foreach ($users as &$u) {
-            if (strcasecmp($u['username'] ?? '', $user['username'] ?? '') === 0) {
-                $u = array_merge($u, $user);
-                $found = true; break;
+        $incoming = $user;
+        $username = (string)($incoming['username'] ?? '');
+        if ($username === '') { throw new \InvalidArgumentException('username is required'); }
+
+        // Normalize roles
+        if (isset($incoming['roles'])) {
+            if (is_string($incoming['roles'])) {
+                $incoming['roles'] = array_values(array_filter(array_map('trim', explode(',', $incoming['roles'])), fn($r) => $r !== ''));
+            } elseif (!is_array($incoming['roles'])) {
+                $incoming['roles'] = [];
             }
         }
-        if (!$found) $users[] = $user;
+
+        // Handle password: hash if plaintext provided; do not store plaintext
+        $hasPlain = isset($incoming['password']) && trim((string)$incoming['password']) !== '';
+        $hasHash = isset($incoming['passwordHash']) && trim((string)$incoming['passwordHash']) !== '';
+        $newHash = null;
+        if ($hasPlain) { $newHash = password_hash((string)$incoming['password'], PASSWORD_DEFAULT); }
+        elseif ($hasHash) { $newHash = (string)$incoming['passwordHash']; }
+
+        // Update existing or append new
+        $found = false;
+        foreach ($users as &$u) {
+            if (strcasecmp($u['username'] ?? '', $username) === 0) {
+                $found = true;
+                // Merge updatable fields (roles and others)
+                foreach ($incoming as $k => $v) {
+                    if ($k === 'password' || $k === 'passwordHash' || $k === 'username') continue;
+                    $u[$k] = $v;
+                }
+                // Password: only update if provided
+                if ($newHash !== null) { $u['passwordHash'] = $newHash; }
+                break;
+            }
+        }
+        unset($u); // break reference
+
+        if (!$found) {
+            $record = ['username' => $username, 'roles' => $incoming['roles'] ?? []];
+            if ($newHash !== null) { $record['passwordHash'] = $newHash; }
+            $users[] = $record;
+        }
+
         $this->config->saveUsers($users);
-        return $user;
+        // Return safe user object (omit password)
+        $safe = ['username' => $username, 'roles' => $incoming['roles'] ?? ($found ? null : [])];
+        if ($safe['roles'] === null) { unset($safe['roles']); }
+        return $safe;
     }
     public function deleteUser(string $username): void {
         $users = array_values(array_filter($this->config->users(), fn($u) => strcasecmp($u['username'] ?? '', $username) !== 0));
