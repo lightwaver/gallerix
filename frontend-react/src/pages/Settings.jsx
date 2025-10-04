@@ -56,21 +56,83 @@ function UsersTab() {
 function RolesTab() {
   const [roles, setRoles] = useState({ global: { view: ['admin','member'], upload: ['admin'], admin: ['admin'] } })
   const [error, setError] = useState('')
-  const load = () => { adminApi.getRoles().then(r => setRoles(r.roles || roles)).catch(e => setError(e.message)) }
+  const [pendingAdds, setPendingAdds] = useState({}) // permission -> input value
+
+  const load = () => {
+    adminApi.getRoles()
+      .then(r => setRoles(r.roles || roles))
+      .catch(e => setError(e.message))
+  }
   useEffect(() => { load() }, [])
-  const save = async () => { setError(''); try { await adminApi.setRoles(roles) } catch (e) { setError(e.message) } }
+
+  const save = async () => {
+    setError('')
+    try { await adminApi.setRoles(roles) } catch (e) { setError(e.message) }
+  }
+
+  const removeRole = (perm, role) => {
+    setRoles(prev => {
+      const next = { ...prev, global: { ...prev.global } }
+      const arr = Array.from(new Set([...(next.global[perm] || [])]))
+      next.global[perm] = arr.filter(r => r !== role)
+      return next
+    })
+  }
+
+  const addRole = (perm) => {
+    const value = (pendingAdds[perm] || '').trim()
+    if (!value) return
+    setRoles(prev => {
+      const next = { ...prev, global: { ...prev.global } }
+      const arr = Array.from(new Set([...(next.global[perm] || []), value]))
+      next.global[perm] = arr
+      return next
+    })
+    setPendingAdds(s => ({ ...s, [perm]: '' }))
+  }
+
+  const perms = Object.keys(roles.global || {})
+
+  const Chip = ({ label, onRemove }) => (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px', border:'1px solid var(--ppo-border)', borderRadius:999, background:'var(--ppo-surface-2)', fontSize:12 }}>
+      {label}
+      <button onClick={onRemove} title="Remove" style={{ border:'none', background:'transparent', cursor:'pointer', lineHeight:1, padding:0 }}>
+        <span className="material-symbols-outlined" style={{ fontSize:16 }}>close</span>
+      </button>
+    </span>
+  )
+
   return (
     <div>
       <h3>Roles</h3>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
-      <Card>
-        <pre style={{ margin:0 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setRoles(JSON.parse(e.currentTarget.textContent)) } catch {} }}>
-{JSON.stringify(roles, null, 2)}
-        </pre>
-      </Card>
+      <div style={{ display:'grid', gap:12 }}>
+        {perms.map(perm => (
+          <Card key={perm}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>tune</span>
+                <strong>{perm}</strong>
+              </div>
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+              {(roles.global[perm] || []).map(r => (
+                <Chip key={r} label={r} onRemove={() => removeRole(perm, r)} />
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10 }}>
+              <Input placeholder="Add role…" value={pendingAdds[perm] || ''} onChange={e => setPendingAdds(s => ({ ...s, [perm]: e.target.value }))} />
+              <Button onClick={() => addRole(perm)} icon="add">Add</Button>
+            </div>
+          </Card>
+        ))}
+      </div>
       <div style={{ marginTop: 12 }}>
         <Button icon="save" onClick={save}>Save</Button>
       </div>
+      <p style={{ fontSize:12, color:'var(--ppo-muted)' }}>
+        Tip: Permissions are defined under roles.global. You can also edit raw JSON in the config if you need advanced changes.
+      </p>
     </div>
   )
 }
@@ -79,10 +141,42 @@ function GalleriesTab() {
   const [gals, setGals] = useState([])
   const [form, setForm] = useState({ name: '', title: '', description: '', roles: { view:['admin','member'], upload:['admin'], admin:['admin'] } })
   const [error, setError] = useState('')
+  const [pendingAdds, setPendingAdds] = useState({ view: '', upload: '', admin: '' })
   const load = () => { adminApi.listGalleries().then(r=> setGals(r.galleries||[])).catch(e=> setError(e.message)) }
   useEffect(() => { load() }, [])
   const submit = async (e) => { e.preventDefault(); setError(''); try { await adminApi.upsertGallery(form); setForm({ name:'', title:'', description:'', roles: { view:['admin','member'], upload:['admin'], admin:['admin'] } }); load() } catch(e){ setError(e.message) } }
   const remove = async (g) => { if (confirm(`Delete ${g.name}?`)) { await adminApi.deleteGallery(g.name); load() } }
+  const edit = (g) => { setForm({ name:g.name || '', title:g.title || '', description:g.description || '', roles: g.roles || { view:[], upload:[], admin:[] } }) }
+
+  const removeRole = (perm, role) => {
+    setForm(prev => {
+      const next = { ...prev, roles: { ...prev.roles } }
+      const arr = Array.from(new Set([...(next.roles[perm] || [])]))
+      next.roles[perm] = arr.filter(r => r !== role)
+      return next
+    })
+  }
+
+  const addRole = (perm) => {
+    const value = (pendingAdds[perm] || '').trim()
+    if (!value) return
+    setForm(prev => {
+      const next = { ...prev, roles: { ...prev.roles } }
+      const arr = Array.from(new Set([...(next.roles[perm] || []), value]))
+      next.roles[perm] = arr
+      return next
+    })
+    setPendingAdds(s => ({ ...s, [perm]: '' }))
+  }
+
+  const Chip = ({ label, onRemove }) => (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px', border:'1px solid var(--ppo-border)', borderRadius:999, background:'var(--ppo-surface-2)', fontSize:12 }}>
+      {label}
+      <button onClick={onRemove} title="Remove" style={{ border:'none', background:'transparent', cursor:'pointer', lineHeight:1, padding:0 }}>
+        <span className="material-symbols-outlined" style={{ fontSize:16 }}>close</span>
+      </button>
+    </span>
+  )
   return (
     <div>
       <h3>Galleries</h3>
@@ -94,7 +188,10 @@ function GalleriesTab() {
               <div style={{ fontWeight:600 }}>{g.name}</div>
               <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.title}</div>
             </div>
-            <Button variant="outline" icon="delete" onClick={() => remove(g)}>Delete</Button>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="outline" icon="edit" onClick={() => edit(g)}>Edit</Button>
+              <Button variant="outline" icon="delete" onClick={() => remove(g)}>Delete</Button>
+            </div>
           </div>
         ))}
       </Card>
@@ -102,12 +199,27 @@ function GalleriesTab() {
         <Input label="Name" placeholder="e.g. summer-camp-2025" value={form.name} onChange={e=>setForm(f=>({...f, name:e.target.value}))} />
         <Input label="Title" placeholder="Summer Camp 2025" value={form.title} onChange={e=>setForm(f=>({...f, title:e.target.value}))} />
         <TextArea label="Description" placeholder="Description" value={form.description} onChange={e=>setForm(f=>({...f, description:e.target.value}))} />
-        <label style={{ fontSize: 12, color:'var(--ppo-muted)' }}>Roles JSON</label>
-        <Card>
-          <pre style={{ margin:0 }} contentEditable suppressContentEditableWarning onBlur={e=>{ try { setForm(f=>({...f, roles: JSON.parse(e.currentTarget.textContent)})) } catch {} }}>
-{JSON.stringify(form.roles, null, 2)}
-          </pre>
-        </Card>
+        <div style={{ display:'grid', gap:12 }}>
+          {['view','upload','admin'].map(perm => (
+            <Card key={perm}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>tune</span>
+                  <strong>{perm}</strong>
+                </div>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                {((form.roles && form.roles[perm]) || []).map(r => (
+                  <Chip key={r} label={r} onRemove={() => removeRole(perm, r)} />
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10 }}>
+                <Input placeholder="Add role…" value={pendingAdds[perm] || ''} onChange={e => setPendingAdds(s => ({ ...s, [perm]: e.target.value }))} />
+                <Button type="button" onClick={() => addRole(perm)} icon="add">Add</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
         <Button icon="save" type="submit">Add/Update</Button>
       </form>
     </div>

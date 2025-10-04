@@ -185,18 +185,27 @@ class Router
             echo json_encode(['error' => 'Gallery name or title required']);
             return;
         }
-        // Build default roles: include admin and current user's roles
+        // Build roles: include admin and current user's roles; merge with payload roles if provided
         $userRoles = $user['roles'] ?? [];
         $baseRoles = array_values(array_unique(array_merge(['admin'], $userRoles)));
+        $inputRoles = is_array($input['roles'] ?? null) ? $input['roles'] : [];
+        $roles = [
+            'view' => $baseRoles,
+            'upload' => $baseRoles,
+            'admin' => $baseRoles,
+        ];
+        foreach (['view','upload','admin'] as $perm) {
+            if (isset($inputRoles[$perm]) && is_array($inputRoles[$perm])) {
+                $clean = array_values(array_filter(array_map(function ($r) { return is_string($r) ? trim($r) : ''; }, $inputRoles[$perm]), function ($r) { return $r !== ''; }));
+                // Always ensure base roles are included
+                $roles[$perm] = array_values(array_unique(array_merge($clean, $baseRoles)));
+            }
+        }
         $gallery = [
             'name' => $name,
             'title' => $title !== '' ? $title : $name,
             'description' => $desc,
-            'roles' => [
-                'view' => $baseRoles,
-                'upload' => $baseRoles,
-                'admin' => $baseRoles,
-            ],
+            'roles' => $roles,
         ];
         $res = $this->admin->upsertGallery($gallery);
         echo json_encode(['gallery' => $res]);
