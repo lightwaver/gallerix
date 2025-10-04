@@ -32,4 +32,20 @@ class ConfigLoader
     public function users(): array { return $this->getJson('users.json'); }
     public function roles(): array { return $this->getJson('roles.json'); }
     public function galleries(): array { return $this->getJson('galleries.json'); }
+
+    public function putJson(string $blobName, array $data): void
+    {
+        $client = $this->azure->getBlobClient();
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            throw new \RuntimeException("Failed to encode JSON for $blobName");
+        }
+        $opts = new \MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions();
+        $opts->setContentType('application/json');
+        $client->createBlockBlob($this->configContainer, $blobName, $json, $opts);
+    }
+
+    public function saveUsers(array $users): void { $this->putJson('users.json', $users); }
+    public function saveRoles(array $roles): void { $this->putJson('roles.json', $roles); }
+    public function saveGalleries(array $gals): void { $this->putJson('galleries.json', $gals); }
 }

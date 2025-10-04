@@ -9,13 +9,15 @@ class Router
     private ConfigLoader $config;
     private Auth $auth;
     private GalleryService $galleries;
+    private AdminService $admin;
 
     public function __construct()
     {
         $this->azure = new AzureClient();
         $this->config = new ConfigLoader($this->azure);
         $this->auth = new Auth($this->config);
-        $this->galleries = new GalleryService($this->azure, $this->config);
+    $this->galleries = new GalleryService($this->azure, $this->config);
+    $this->admin = new AdminService($this->config);
     }
 
     public function handle(string $method, string $uri): void
@@ -40,6 +42,12 @@ class Router
         if ($path === '/api/me' && $method === 'GET') {
             $user = $this->auth->requireAuth();
             echo json_encode(['user' => $user]);
+            return;
+        }
+
+        // Admin endpoints
+        if (str_starts_with($path, '/api/admin')) {
+            $this->handleAdmin($method, $path);
             return;
         }
 
@@ -120,5 +128,34 @@ class Router
         }
         $res = $this->galleries->upload($name, $_FILES['file']);
         echo json_encode($res);
+    }
+
+    private function handleAdmin(string $method, string $path): void
+    {
+        $user = $this->auth->requireAuth();
+        if (!$this->auth->hasRole($user, 'admin')) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Admin only']);
+            return;
+        }
+        $input = json_decode(file_get_contents('php://input') ?: 'null', true) ?: [];
+        // Users
+        if ($path === '/api/admin/users' && $method === 'GET') { echo json_encode(['users' => $this->admin->listUsers()]); return; }
+        if ($path === '/api/admin/users' && $method === 'POST') { echo json_encode(['user' => $this->admin->upsertUser($input)]); return; }
+        if (preg_match('#^/api/admin/users/([^/]+)$#', $path, $m)) {
+            if ($method === 'DELETE') { $this->admin->deleteUser(urldecode($m[1])); echo json_encode(['ok' => true]); return; }
+        }
+        // Roles
+        if ($path === '/api/admin/roles' && $method === 'GET') { echo json_encode(['roles' => $this->admin->getRoles()]); return; }
+        if ($path === '/api/admin/roles' && $method === 'PUT') { echo json_encode(['roles' => $this->admin->setRoles($input)]); return; }
+        // Galleries
+        if ($path === '/api/admin/galleries' && $method === 'GET') { echo json_encode(['galleries' => $this->admin->listGalleries()]); return; }
+        if ($path === '/api/admin/galleries' && ($method === 'POST' || $method === 'PUT')) { echo json_encode(['gallery' => $this->admin->upsertGallery($input)]); return; }
+        if (preg_match('#^/api/admin/galleries/([^/]+)$#', $path, $m)) {
+            if ($method === 'DELETE') { $this->admin->deleteGallery(urldecode($m[1])); echo json_encode(['ok' => true]); return; }
+        }
+
+        http_response_code(404);
+        echo json_encode(['error' => 'Not found']);
     }
 }

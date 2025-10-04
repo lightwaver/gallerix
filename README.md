@@ -48,6 +48,15 @@ Base URL defaults to your PHP server origin (e.g., http://localhost:8000). Paths
 - POST `/api/galleries/:name/upload` — multipart/form-data with `file` field (requires upload permission)
 
 Media proxy (auth-protected)
+Admin endpoints (admin role required)
+- GET `/api/admin/users` — list users
+- POST `/api/admin/users` — upsert user { username, roles[], passwordHash? }
+- DELETE `/api/admin/users/:username` — remove user
+- GET `/api/admin/roles` — fetch roles config
+- PUT `/api/admin/roles` — replace roles config
+- GET `/api/admin/galleries` — list galleries
+- POST `/api/admin/galleries` — upsert a gallery
+- DELETE `/api/admin/galleries/:name` — delete a gallery
 - GET `/image.php?g=<gallery>&f=<filename>` — streams the blob content if the current session is authorized to view the gallery. The login endpoint sets an `HttpOnly` cookie `gallerix_token` used by the proxy.
   - You can also pass `Authorization: Bearer <token>` or `?t=<token>` for testing.
 
