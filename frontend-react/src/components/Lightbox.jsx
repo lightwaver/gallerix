@@ -26,7 +26,8 @@ export default function Lightbox({ items, startIndex = 0, onClose }) {
       const DURATION = 4000
       endAtRef.current = Date.now() + DURATION
       timerRef.current = setTimeout(() => {
-        setIndex((i) => (i + 1) % items.length)
+        // Use animated navigation for slideshow advance
+        next()
       }, DURATION)
       const tick = () => {
         const now = Date.now()
