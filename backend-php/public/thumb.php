@@ -56,11 +56,14 @@ try {
         $token = (string)$_SERVER['HTTP_AUTHORIZATION'];
     }
     if ($token) { $_SERVER['HTTP_AUTHORIZATION'] = $token; }
-    $user = $auth->requireAuth();
 
     $gal = $gals->getGalleryByName($gallery);
     if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
-    if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
+    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
+    if (!$isPublic) {
+        $user = $auth->requireAuth();
+        if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
+    }
 
     $client = $azure->getBlobClient();
     $dataContainer = getenv('AZURE_CONTAINER_DATA') ?: 'data';
@@ -88,11 +91,13 @@ try {
     $origProps = $orig->getProperties();
     $origCt = (string)($origProps->getContentType() ?: 'image/jpeg');
 
-    // Only generate thumbs for images; otherwise, just 404 or pass through
+    // Only generate thumbs for images; otherwise, return a tiny transparent PNG as placeholder
     if (strpos($origCt, 'image') !== 0) {
-        // Not an image: return 404 or minimal 1x1
-        http_response_code(404);
-        echo 'Not an image';
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==');
+        header('Content-Type: image/png');
+        header('Content-Length: ' . strlen($png));
+        header('Cache-Control: private, max-age=86400');
+        echo $png;
         exit;
     }
 

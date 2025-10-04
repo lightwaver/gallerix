@@ -59,7 +59,6 @@ try {
         // Temporarily inject header so requireAuth path works
         $_SERVER['HTTP_AUTHORIZATION'] = $token;
     }
-    $user = $auth->requireAuth();
 
     $gal = $gals->getGalleryByName($gallery);
     if (!$gal) {
@@ -67,10 +66,15 @@ try {
         echo 'Not found';
         exit;
     }
-    if (!$auth->can($user, 'view', $gal)) {
-        http_response_code(403);
-        echo 'Forbidden';
-        exit;
+    // If gallery is public, allow without auth; otherwise require token and check roles
+    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
+    if (!$isPublic) {
+        $user = $auth->requireAuth();
+        if (!$auth->can($user, 'view', $gal)) {
+            http_response_code(403);
+            echo 'Forbidden';
+            exit;
+        }
     }
 
     // Fetch blob and stream

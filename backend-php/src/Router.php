@@ -31,6 +31,10 @@ class Router
             $this->getGalleries();
             return;
         }
+        if ($path === '/api/public-galleries' && $method === 'GET') {
+            $this->getPublicGalleries();
+            return;
+        }
         if ($path === '/api/galleries' && $method === 'POST') {
             $this->postCreateGallery();
             return;
@@ -94,22 +98,35 @@ class Router
         echo json_encode(['galleries' => $list, 'canCreate' => $canCreate]);
     }
 
+    private function getPublicGalleries(): void
+    {
+        // No auth required; returns galleries that have 'public' in roles.view
+        $list = $this->galleries->listPublicGalleries();
+        echo json_encode(['galleries' => $list]);
+    }
+
     private function getGalleryItems(string $name): void
     {
-        $user = $this->auth->requireAuth();
         $gal = $this->galleries->getGalleryByName($name);
         if (!$gal) {
             http_response_code(404);
             echo json_encode(['error' => 'Gallery not found']);
             return;
         }
-        if (!$this->auth->can($user, 'view', $gal)) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Forbidden']);
-            return;
+        $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
+        $user = null;
+        if (!$isPublic) {
+            $user = $this->auth->requireAuth();
+            if (!$this->auth->can($user, 'view', $gal)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden']);
+                return;
+            }
         }
-    $items = $this->galleries->listItems($name, $user['token'] ?? null);
-        echo json_encode(['items' => $items, 'gallery' => ['name' => $name, 'title' => $gal['title'] ?? $name]]);
+        $token = $user['token'] ?? null;
+        $items = $this->galleries->listItems($name, $token);
+        $canUpload = $user ? $this->auth->can($user, 'upload', $gal) : false;
+        echo json_encode(['items' => $items, 'gallery' => ['name' => $name, 'title' => $gal['title'] ?? $name, 'public' => $isPublic, 'canUpload' => $canUpload]]);
     }
 
     private function postUpload(string $name): void
@@ -169,7 +186,6 @@ class Router
                 echo json_encode(['ok' => true]); return;
             }
         }
-
         http_response_code(404);
         echo json_encode(['error' => 'Not found']);
     }

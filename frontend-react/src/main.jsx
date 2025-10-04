@@ -50,7 +50,7 @@ createRoot(document.getElementById('root')).render(
     <Routes>
   <Route path="/login" element={<Login />} />
       <Route path="/" element={<RequireAuth><AppLayout><GalleryList /></AppLayout></RequireAuth>} />
-      <Route path="/g/:name" element={<RequireAuth><AppLayout><GalleryView /></AppLayout></RequireAuth>} />
+  <Route path="/g/:name" element={<AppLayout><GalleryView /></AppLayout>} />
       <Route path="/settings" element={<RequireAuth><AppLayout><Settings /></AppLayout></RequireAuth>} />
     </Routes>
   </BrowserRouter>

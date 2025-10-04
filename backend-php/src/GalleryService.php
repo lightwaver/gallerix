@@ -36,6 +36,23 @@ class GalleryService
         return $result;
     }
 
+    public function listPublicGalleries(): array
+    {
+        $galleries = $this->config->galleries();
+        $result = [];
+        foreach ($galleries as $gal) {
+            $roles = $gal['roles']['view'] ?? [];
+            if (in_array('public', $roles, true)) {
+                $result[] = [
+                    'name' => $gal['name'],
+                    'title' => $gal['title'] ?? $gal['name'],
+                    'description' => $gal['description'] ?? ''
+                ];
+            }
+        }
+        return $result;
+    }
+
     public function getGalleryByName(string $name): ?array
     {
         $galleries = $this->config->galleries();
@@ -69,14 +86,15 @@ class GalleryService
             if ($token) { $thumbPath .= '&t=' . rawurlencode($token); }
             $thumbUrl = $publicBase ? ($publicBase . $thumbPath) : $thumbPath;
             $mime = $blob->getProperties()->getContentType();
-            $type = str_starts_with((string)$mime, 'video') ? 'video' : 'image';
+            $ctype = (string)$mime;
+            $type = (str_starts_with($ctype, 'video')) ? 'video' : ((stripos($ctype, 'application/pdf') === 0) ? 'pdf' : 'image');
             $items[] = [
                 'name' => $file,
                 'url' => $url,
                 'type' => $type,
                 'size' => $blob->getProperties()->getContentLength(),
                 'contentType' => $mime,
-                'thumbUrl' => $thumbUrl,
+                'thumbUrl' => $type === 'image' ? $thumbUrl : null,
             ];
         }
         return $items;

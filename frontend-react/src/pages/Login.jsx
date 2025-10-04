@@ -1,13 +1,14 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api.js'
 import { setAuth } from '../services/auth.js'
-import { Container, Card, Input, Button } from '../components/ui.jsx'
+import { Container, Card, Input, Button, Grid } from '../components/ui.jsx'
 
 export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [publicGalleries, setPublicGalleries] = useState([])
   const navigate = useNavigate()
 
   async function submit(e) {
@@ -22,10 +23,19 @@ export default function Login() {
     }
   }
 
+  useEffect(() => {
+    // Load public galleries for quick access without login
+    fetch('/api/public-galleries').then(async r => {
+      if (!r.ok) return
+      const j = await r.json()
+      setPublicGalleries(j.galleries || [])
+    }).catch(()=>{})
+  }, [])
+
   return (
     <div style={{ fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', background:'var(--ppo-bg)', minHeight:'100vh', color:'var(--ppo-text)' }}>
       <Container>
-        <div style={{ display:'grid', placeItems:'center', minHeight:'70vh' }}>
+        <div style={{ display:'grid', placeItems:'center', minHeight:'60vh' }}>
           <Card style={{ width:'100%', maxWidth: 420 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom: 12 }}>
               <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>lock</span>
@@ -44,6 +54,21 @@ export default function Login() {
             )}
           </Card>
         </div>
+        {publicGalleries.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <h3 style={{ margin: '8px 0' }}>Public galleries</h3>
+            <Grid>
+              {publicGalleries.map(g => (
+                <a key={g.name} href={`/g/${encodeURIComponent(g.name)}`} style={{ textDecoration:'none', color:'inherit' }}>
+                  <Card>
+                    <div style={{ fontWeight:600 }}>{g.title}</div>
+                    <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.description}</div>
+                  </Card>
+                </a>
+              ))}
+            </Grid>
+          </div>
+        )}
       </Container>
     </div>
   )

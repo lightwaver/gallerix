@@ -8,11 +8,16 @@ import Lightbox from '../components/Lightbox.jsx'
 
 function Thumb({ item, onClick }) {
   const isVideo = item.type === 'video'
+  const isPdf = item.type === 'pdf'
   return (
     <Card>
       <div onClick={onClick} style={{ cursor:'zoom-in' }}>
         {isVideo ? (
           <video src={item.url} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} muted />
+        ) : isPdf ? (
+          <div style={{ width:'100%', height:180, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, background:'var(--ppo-surface-2)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize:48, color:'var(--ppo-primary)' }}>picture_as_pdf</span>
+          </div>
         ) : (
           <img src={item.thumbUrl || item.url} alt={item.name} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} />
         )}
@@ -31,11 +36,11 @@ export default function GalleryView() {
   const [lightboxIdx, setLightboxIdx] = useState(null)
 
   const user = getUser()
-  const canUpload = user?.roles?.includes('admin') // per-gallery permissions are enforced by the API
+  const [canUpload, setCanUpload] = useState(false)
 
   useEffect(() => {
     api.listItems(name)
-      .then(r => { setItems(r.items || []); setTitle(r.gallery?.title || name) })
+      .then(r => { setItems(r.items || []); setTitle(r.gallery?.title || name); setCanUpload(!!r.gallery?.canUpload) })
       .catch(e => setError(e.message))
   }, [name])
 

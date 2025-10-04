@@ -186,11 +186,19 @@ export default function Lightbox({ items, startIndex = 0, onClose }) {
 
 function SlideMedia({ it }) {
   if (!it) return null
-  return it.type === 'video' ? (
-    <video src={it.url} style={styles.media} controls />
-  ) : (
-    <img src={it.url} alt={it?.name || ''} style={styles.media} draggable={false} fetchpriority="high" />
-  )
+  if (it.type === 'video') {
+    return <video src={it.url} style={styles.media} controls />
+  }
+  if (it.type === 'pdf') {
+    // Basic PDF fallback: embed in iframe if browser supports, otherwise show icon & download link
+    return (
+      <div style={{ width: '100%', height: '100%', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12 }}>
+        <iframe src={it.url} title={it.name} style={{ width: '100%', height: '100%', border: 'none', background:'white' }} />
+        <a href={it.url} target="_blank" rel="noreferrer" style={{ color:'var(--ppo-primary)' }}>Open PDF</a>
+      </div>
+    )
+  }
+  return <img src={it.url} alt={it?.name || ''} style={styles.media} draggable={false} fetchpriority="high" />
 }
 
 const styles = {
