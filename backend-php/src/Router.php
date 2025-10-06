@@ -122,6 +122,9 @@ class Router
                 echo json_encode(['error' => 'Forbidden']);
                 return;
             }
+        } else {
+            // Public gallery: try to detect logged-in user to decide canUpload
+            $user = $this->auth->optionalAuth();
         }
         $token = $user['token'] ?? null;
         $items = $this->galleries->listItems($name, $token);

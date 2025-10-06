@@ -69,6 +69,29 @@ class Auth
         }
     }
 
+    /**
+     * Attempts to read and decode the Authorization token if present.
+     * Returns the user array on success, or null if no/invalid token.
+     */
+    public function optionalAuth(): ?array
+    {
+        $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (!str_starts_with($auth, 'Bearer ')) {
+            return null;
+        }
+        $token = substr($auth, 7);
+        try {
+            $decoded = JWT::decode($token, new Key($this->jwtSecret, 'HS256'));
+            return [
+                'username' => $decoded->sub ?? 'unknown',
+                'roles' => $decoded->roles ?? [],
+                'token' => $token,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function hasRole(array $user, string $role): bool
     {
         return in_array($role, $user['roles'] ?? [], true);
