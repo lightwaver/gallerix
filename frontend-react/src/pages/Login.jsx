@@ -61,6 +61,11 @@ export default function Login() {
               {publicGalleries.map(g => (
                 <a key={g.name} href={`/g/${encodeURIComponent(g.name)}`} style={{ textDecoration:'none', color:'inherit' }}>
                   <Card>
+                    {g.coverUrl && (
+                      <div style={{ width:'100%', aspectRatio:'16/9', background:'var(--ppo-surface-2)', borderRadius:8, overflow:'hidden', marginBottom:10 }}>
+                        <img src={g.coverUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                      </div>
+                    )}
                     <div style={{ fontWeight:600 }}>{g.title}</div>
                     <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.description}</div>
                   </Card>

@@ -29,7 +29,8 @@ class GalleryService
                 $result[] = [
                     'name' => $gal['name'],
                     'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? ''
+                    'description' => $gal['description'] ?? '',
+                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'], $user['token'] ?? null)
                 ];
             }
         }
@@ -46,7 +47,8 @@ class GalleryService
                 $result[] = [
                     'name' => $gal['name'],
                     'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? ''
+                    'description' => $gal['description'] ?? '',
+                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
                 ];
             }
         }
@@ -173,5 +175,40 @@ class GalleryService
             if (in_array($r, $roles, true)) return true;
         }
         return false;
+    }
+
+    /**
+     * Returns a preview-sized cover URL for the first image in the gallery, or null if none.
+     */
+    private function buildGalleryCoverUrl(string $galleryName, ?string $authToken = null): ?string
+    {
+        try {
+            $client = $this->azure->getBlobClient();
+            $prefix = rtrim($galleryName, '/') . '/';
+            $opts = new ListBlobsOptions();
+            $opts->setPrefix($prefix);
+            $cont = null;
+            do {
+                if ($cont) { $opts->setContinuationToken($cont); }
+                $result = $client->listBlobs($this->dataContainer, $opts);
+                foreach ($result->getBlobs() as $blob) {
+                    $name = $blob->getName();
+                    if (str_ends_with($name, '/')) continue; // skip folders
+                    $file = substr($name, strlen($prefix));
+                    if ($file === '' || str_contains($file, '/')) continue; // only direct children
+                    $mime = (string)$blob->getProperties()->getContentType();
+                    if (str_starts_with($mime, 'image')) {
+                        $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
+                        $path = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file) . '&s=preview';
+                        if (!empty($authToken)) { $path .= '&t=' . rawurlencode($authToken); }
+                        return $publicBase ? ($publicBase . $path) : $path;
+                    }
+                }
+                $cont = $result->getContinuationToken();
+            } while ($cont);
+        } catch (\Throwable $e) {
+            // ignore failures and return no cover
+        }
+        return null;
     }
 }

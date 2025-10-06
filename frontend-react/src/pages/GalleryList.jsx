@@ -43,6 +43,11 @@ export default function GalleryList() {
         {galleries.map(g => (
           <Link key={g.name} to={`/g/${encodeURIComponent(g.name)}`} style={{ textDecoration:'none', color:'inherit' }}>
             <Card>
+              {g.coverUrl && (
+                <div style={{ width:'100%', aspectRatio:'16/9', background:'var(--ppo-surface-2)', borderRadius:8, overflow:'hidden', marginBottom:10 }}>
+                  <img src={g.coverUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                </div>
+              )}
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>collections</span>
                 <div>

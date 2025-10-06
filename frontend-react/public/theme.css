@@ -53,3 +53,30 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 800;
   letter-spacing: 0.01em;
 }
+
+/* Top navigation buttons */
+.topnav {
+  display: flex;
+  gap: 8px;
+}
+.navbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--ppo-border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--ppo-text);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.navbtn:hover {
+  background: var(--ppo-surface-2);
+}
+.navbtn.active {
+  background: var(--ppo-primary);
+  color: var(--ppo-primary-contrast);
+  border-color: var(--ppo-primary);
+}
