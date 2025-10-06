@@ -1,115 +1,136 @@
 # Gallerix
 
-Small photo & video gallery for a scouts group using:
-- PHP backend API (serving auth, gallery listing, uploads)
-- Azure Blob Storage (config and data containers)
+Small photo & video gallery using:
+- PHP backend API (JWT auth, Azure Blob integration, media proxy)
 - React frontend (Vite)
+- Azure Blob Storage (config/data/thumbs containers)
+
+## Features
+- Public galleries: Galleries with `roles.view` containing `public` are visible without login and accessible from the Login screen.
+- Media proxy endpoints:
+  - `public/image.php` streams original files with auth/role checks. Public galleries allow access without a token; private ones require a JWT (via Authorization header, `gallerix_token` cookie, or `?t=` query).
+  - `public/thumb.php` generates and caches thumbnails and preview images on-demand using GD. Non-images return a tiny PNG placeholder.
+- Thumbnails & previews:
+  - Grid thumbnails sized by `THUMB_MAX_SIZE`.
+  - Lightbox and cover images use `PREVIEW_MAX_SIZE` via `s=preview` and are cached as separate blobs with an `_preview` suffix in the thumbs container.
+  - Legacy preview paths are supported for fallback.
+- Lightbox:
+  - Animated slide transitions with slideshow mode.
+  - Preloads adjacent preview images.
+  - Downloads always link to the original file.
+  - PDFs render inline via iframe with an icon in the grid.
+- Roles & permissions:
+  - Global `createGallery` permission controls who can create galleries.
+  - Per-gallery `view`/`upload`/`admin` roles drive server-side checks; public galleries still compute `canUpload` if a logged-in user is present.
+  - Admin Settings UI for users/roles/galleries. User passwords can be entered in plaintext in the UI; backend hashes them.
+- Gallery cover image: The first image’s preview is used as the title image in lists; includes a token for private galleries across API calls.
+- Storage cleanup: Deleting a gallery via Admin also removes its blobs from both `data` and `thumbs` containers.
+- Typography & UI:
+  - Kumbh Sans as default font; headings use Extra Bold.
+  - Top navigation uses button-style tabs with active state highlighting.
 
 ## Azure setup
-- Create two containers in your storage account:
-  - `config` (or set `AZURE_CONTAINER_CONFIG`) for JSON configuration files
-  - `data` (or set `AZURE_CONTAINER_DATA`) for galleries; each gallery is a folder, e.g. `summer-camp-2025/IMG_1.jpg`
-- Upload the following JSON files to the `config` container. See `backend-php/CONFIG_SCHEMAS.md` for details:
-  - `users.json` (array of users with passwordHash and roles)
-  - `roles.json` (role configuration for global permissions)
-  - `galleries.json` (list of galleries with per-gallery roles for view/upload/admin)
+Create containers in your storage account:
+- `config` (or `AZURE_CONTAINER_CONFIG`) for JSON configuration files
+- `data` (or `AZURE_CONTAINER_DATA`) for gallery files (each gallery is a folder)
+- `thumbs` (or `AZURE_CONTAINER_THUMBS`) for generated thumbnails/previews
+
+Upload the following JSON files to `config` (see `backend-php/CONFIG_SCHEMAS.md` for details):
+- `users.json` — array of users with `username`, `passwordHash` (bcrypt), and `roles`
+- `roles.json` — global role configuration for permissions (e.g., `createGallery`)
+- `galleries.json` — list of galleries with per-gallery `roles.view/upload/admin`
 
 ## Backend (PHP)
-Configure environment in `backend-php/.env` (copy from `.env.example`). Either set `AZURE_STORAGE_CONNECTION_STRING` or the account/key/endpoints.
+Environment: copy `backend-php/.env.example` to `backend-php/.env` and set either `AZURE_STORAGE_CONNECTION_STRING` or the account/key/endpoints.
 
-Run locally on macOS:
-
-1. Install dependencies
-   - PHP >= 8.1 and Composer
-2. From `backend-php/`:
+Run locally:
 
 ```
 composer install
-php -S 0.0.0.0:8000 -t public
+php -d upload_max_filesize=64M -d post_max_size=64M -S 127.0.0.1:8000 -t public
 ```
+
+Key env vars:
+- `AZURE_STORAGE_CONNECTION_STRING` or (`AZURE_STORAGE_BLOB_ENDPOINT`, `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`)
+- `AZURE_CONTAINER_CONFIG` (default: config)
+- `AZURE_CONTAINER_DATA` (default: data)
+- `AZURE_CONTAINER_THUMBS` (default: thumbs)
+- `JWT_SECRET` (required; change from default)
+- `JWT_ISSUER` (default: gallerix)
+- `JWT_EXPIRES_IN` (seconds; default: 86400)
+- `THUMB_MAX_SIZE` and `PREVIEW_MAX_SIZE` (pixel bounds)
+- `PUBLIC_BASE_URL` (optional, e.g., `/api` or full origin; used to prefix media URLs)
+
+### API endpoints
+Auth & data:
+- POST `/api/login` → `{ token, user }`
+- GET `/api/me` → `{ user }` (requires Authorization)
+- GET `/api/galleries` → `{ galleries: [{ name, title, description, coverUrl }] }` (requires Authorization)
+- GET `/api/public-galleries` → `{ galleries: [...] }` (no auth)
+- GET `/api/galleries/:name/items` → `{ gallery: { title, public, canUpload }, items: [...] }` (public allowed, optional auth for permissions)
+- POST `/api/galleries/:name/upload` — multipart form with `file` (requires upload role)
+
+Admin (admin role):
+- `/api/admin/users` (GET/POST/DELETE)
+- `/api/admin/roles` (GET/PUT)
+- `/api/admin/galleries` (GET/POST/PUT/DELETE)
+
+Media proxy:
+- `GET /image.php?g=<gallery>&f=<file>[&t=<token>]` — original download/stream with role checks
+- `GET /thumb.php?g=<gallery>&f=<file>&s=thumb|preview[&t=<token>]` — generates/serves cached images
 
 ## Frontend (React / Vite)
 
-From `frontend-react/`:
+Start dev:
 
 ```
+cd frontend-react
 npm install
 npm run dev
 ```
 
-Vite dev server proxies `/api/*` to `http://localhost:8000`.
-
-## Backend endpoints
-Base URL defaults to your PHP server origin (e.g., http://localhost:8000). Paths:
-- POST `/api/login` — body: `{ "username": "", "password": "" }` → `{ token, user }`
-- GET `/api/me` — returns current user info `{ user }` (requires Authorization header)
-- GET `/api/galleries` — returns `{ galleries: [{ name, title, description }] }`
-- GET `/api/galleries/:name/items` — returns `{ gallery, items: [{ name, url, type, size, contentType }] }`
-- POST `/api/galleries/:name/upload` — multipart/form-data with `file` field (requires upload permission)
-
-Media proxy (auth-protected)
-Admin endpoints (admin role required)
-- GET `/api/admin/users` — list users
-- POST `/api/admin/users` — upsert user { username, roles[], passwordHash? }
-- DELETE `/api/admin/users/:username` — remove user
-- GET `/api/admin/roles` — fetch roles config
-- PUT `/api/admin/roles` — replace roles config
-- GET `/api/admin/galleries` — list galleries
-- POST `/api/admin/galleries` — upsert a gallery
-- DELETE `/api/admin/galleries/:name` — delete a gallery
-- GET `/image.php?g=<gallery>&f=<filename>` — streams the blob content if the current session is authorized to view the gallery. The login endpoint sets an `HttpOnly` cookie `gallerix_token` used by the proxy.
-  - You can also pass `Authorization: Bearer <token>` or `?t=<token>` for testing.
-
-### Backend configuration (.env)
-Copy `backend-php/.env.example` to `backend-php/.env` and set one of the following connection methods:
-- AZURE_STORAGE_CONNECTION_STRING
-  - Example: `DefaultEndpointsProtocol=https;AccountName=NAME;AccountKey=KEY;EndpointSuffix=core.windows.net`
-- Or specify endpoint + key:
-  - `AZURE_STORAGE_BLOB_ENDPOINT=https://NAME.blob.core.windows.net`
-  - `AZURE_STORAGE_ACCOUNT=NAME`
-  - `AZURE_STORAGE_KEY=...`
-
-Other settings:
-- `AZURE_CONTAINER_CONFIG` (default: config)
-- `AZURE_CONTAINER_DATA` (default: data)
-- `JWT_SECRET` (required; change from default)
-- `JWT_ISSUER` (default: gallerix)
-- `JWT_EXPIRES_IN` (seconds; default: 86400)
-
-Troubleshooting:
-- Error: "Azure storage connection not configured" → Ensure the above env vars are set and your server loads the `.env` (the dev server runs from `backend-php/` and autoloads environment in `public/index.php`). Restart the PHP dev server after changes.
-
-## Frontend runtime configuration
-You can point the React app to any backend without rebuilding by editing `frontend-react/public/gallerix.config.json`:
+Runtime config (`frontend-react/public/gallerix.config.json`):
 
 ```
 {
-  "backendUrl": "http://localhost:8000"
+  "backendUrl": "/api"
 }
 ```
 
-If `backendUrl` is empty or missing, the app will call `/api/...` relative to the current origin. In development, Vite proxies `/api` to the local PHP server as defined in `vite.config.js`.
+If omitted, the app calls `/api/...` on the same origin. For a different origin, set the full base URL.
 
-## Authentication
-- Users authenticate with username/password (password hashes in users.json).
-- Backend returns a JWT; frontend stores it in localStorage.
-- Authorizations are checked server-side per gallery using roles in `galleries.json`.
+## Static hosting with API subfolder
+You can host the React build as a static site and run the PHP API under `/api` (same host) or a separate domain.
 
-## Uploads
-- Uploads go directly to the `data` container under the selected gallery folder.
-- Backend sets content type if provided by the browser.
+Set:
+- Frontend runtime: `backendUrl` to `/api` or `https://api.example.com`
+- Backend: `PUBLIC_BASE_URL` to `/api` or the full API origin
 
-Troubleshooting uploads
-- Error details will now include a human-readable cause (e.g., exceeds upload_max_filesize) plus current ini limits.
-- Common causes:
-  - `UPLOAD_ERR_INI_SIZE` or `UPLOAD_ERR_FORM_SIZE` → file too large for server limits
-  - Missing temp dir or disk write error → check server tmp folder and permissions
-- To raise limits during local dev, you can export env vars or use a custom php.ini. Example run with larger limits:
+Configure your web server to:
+- Serve static files and SPA fallback for `/` (exclude `/api`)
+- Route `/api/*` to the PHP public index and `.php` handlers
+
+## CI/CD (Azure Pipelines)
+- Entry pipeline: `build/pipeline.yaml`
+  - Uses a Variable Group (e.g., `gallerix-secrets`) and a Secure File for backend `.env`
+  - Invokes templates:
+    - `build/build.yaml` — builds frontend, installs backend deps, publishes artifact (without `.env`)
+    - `build/deploy.yaml` — downloads artifact, fetches `.env` from Secure Files, uploads via SSH/SFTP using a Service Connection (e.g., `gallerix-sftp`)
+
+Secrets handling:
+- `.env` is not stored in repo or artifacts; it’s injected at deploy from Secure Files
+- SSH credentials are stored in an Azure DevOps Service Connection and not logged
+
+## Troubleshooting uploads
+If uploads fail, error messages include the reason and PHP limits. Common issues:
+- `UPLOAD_ERR_INI_SIZE` or `UPLOAD_ERR_FORM_SIZE` → raise `upload_max_filesize`/`post_max_size`
+- Missing temp dir or disk write error → check server tmp and permissions
+
+Example dev server with higher limits:
 
 ```
 php -d upload_max_filesize=64M -d post_max_size=64M -S 127.0.0.1:8000 -t public
 ```
 
-## Notes
-- This is a minimal MVP. Consider adding thumbnails generation, presigned URLs, pagination, and admin UI to manage users/galleries.
-initial readmes
+## License
+MIT — see `LICENSE`.

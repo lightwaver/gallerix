@@ -1,0 +1,29 @@
+# Azure Pipelines entry pipeline
+# Triggers on pushes to main; adjust as needed
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  # Name of the pipeline variable group that holds secrets and .env secure file name
+  - name: VariableGroup
+    value: gallerix-secrets
+  # Secure file name uploaded to Library > Secure files (contains backend .env)
+  - name: BackendEnvSecureFile
+    value: backend-env
+
+jobs:
+  - template: build.yaml
+    parameters:
+      VariableGroup: $(VariableGroup)
+      BackendEnvSecureFile: $(BackendEnvSecureFile)
+
+  - template: deploy.yaml
+    parameters:
+      VariableGroup: $(VariableGroup)

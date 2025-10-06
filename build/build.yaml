@@ -1,0 +1,70 @@
+# Template: Build artifacts for Gallerix
+parameters:
+  - name: VariableGroup
+    type: string
+    default: ''
+  - name: BackendEnvSecureFile
+    type: string
+    default: ''
+
+jobs:
+  - job: Build
+    displayName: Build frontend and backend
+    variables:
+      - ${{ if ne(parameters.VariableGroup, '') }}:
+        - group: ${{ parameters.VariableGroup }}
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+
+      # Setup Node for frontend build
+      - task: NodeTool@0
+        displayName: 'Use Node.js 18.x'
+        inputs:
+          versionSpec: '18.x'
+
+      - script: |
+          set -e
+          npm ci
+          npm run build
+        displayName: 'Build frontend'
+        workingDirectory: 'frontend-react'
+
+      # Install Composer dependencies for backend (no dev)
+      - script: |
+          set -e
+          php -v
+          composer -V || true
+          if ! command -v composer >/dev/null 2>&1; then
+            php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+            php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+            rm composer-setup.php
+          fi
+          composer install --no-dev --no-interaction --prefer-dist
+        displayName: 'Install backend dependencies'
+        workingDirectory: 'backend-php'
+
+      # Prepare artifact structure
+      - bash: |
+          set -e
+          ART="$(Build.ArtifactStagingDirectory)/package"
+          mkdir -p "$ART/site" "$ART/api"
+          # Frontend
+          cp -R frontend-react/dist/* "$ART/site/" || true
+          # Backend (keep structure: public, vendor, src, composer files)
+          rsync -a --delete \
+            backend-php/public "$ART/api/" \
+            backend-php/vendor "$ART/api/" \
+            backend-php/src "$ART/api/" || true
+          cp backend-php/composer.json "$ART/api/" || true
+          cp backend-php/composer.lock "$ART/api/" || true
+          # Do NOT include .env in artifact; deploy stage will place it
+        displayName: 'Stage artifacts'
+
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish artifact'
+        inputs:
+          targetPath: '$(Build.ArtifactStagingDirectory)/package'
+          artifact: 'drop'
+          publishLocation: 'pipeline'

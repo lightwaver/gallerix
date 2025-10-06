@@ -1,0 +1,70 @@
+# Template: Deploy artifact to SFTP
+parameters:
+  - name: VariableGroup
+    type: string
+    default: ''
+
+jobs:
+  - deployment: Deploy
+    displayName: 'Deploy to SFTP server'
+    environment: 'production'
+    variables:
+      - ${{ if ne(parameters.VariableGroup, '') }}:
+        - group: ${{ parameters.VariableGroup }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: none
+
+            # Download build artifact
+            - task: DownloadPipelineArtifact@2
+              displayName: 'Download artifact'
+              inputs:
+                artifact: 'drop'
+                path: '$(Pipeline.Workspace)/drop'
+
+            # Download secure .env (backend) from Library > Secure files
+            - task: DownloadSecureFile@1
+              name: backendEnv
+              displayName: 'Download backend .env secure file'
+              inputs:
+                secureFile: '$(BackendEnvSecureFile)'
+
+            # Prepare deploy package
+            - bash: |
+                set -e
+                PKG="$(Pipeline.Workspace)/drop"
+                # Place .env at API root for runtime
+                cp "$(backendEnv.secureFilePath)" "$PKG/api/.env"
+              displayName: 'Prepare deploy package'
+
+            # SFTP upload (using PublishOverSSH) — requires a Service Connection of type SSH
+            - task: CopyFilesOverSSH@0
+              displayName: 'Upload site contents to SFTP'
+              inputs:
+                sshEndpoint: 'gallerix-sftp' # Service Connection name (SSH)
+                sourceFolder: '$(Pipeline.Workspace)/drop/site'
+                contents: '**'
+                targetFolder: '/var/www/gallerix'
+                cleanTargetFolder: true
+
+            - task: CopyFilesOverSSH@0
+              displayName: 'Upload API contents to SFTP'
+              inputs:
+                sshEndpoint: 'gallerix-sftp' # Service Connection name (SSH)
+                sourceFolder: '$(Pipeline.Workspace)/drop/api'
+                contents: '**'
+                targetFolder: '/var/www/gallerix/api'
+                cleanTargetFolder: false
+
+            # Optional: remote commands (e.g., composer install on server if needed)
+            # - task: SSH@0
+            #   inputs:
+            #     sshEndpoint: 'gallerix-sftp'
+            #     runOptions: 'commands'
+            #     commands: |
+            #       cd /var/www/gallerix/api
+            #       php -v
+            #       # if composer not bundled, run it on server (or deploy vendor)
+            #       # composer install --no-dev --optimize-autoloader
