@@ -69,9 +69,19 @@ try {
     $dataContainer = getenv('AZURE_CONTAINER_DATA') ?: 'data';
     $thumbsContainer = getenv('AZURE_CONTAINER_THUMBS') ?: 'thumbs';
     $blobName = rtrim($gallery, '/') . '/' . $file;
-    $thumbName = $blobName; // keep same name/path
+    // Size selector: default 'thumb', optional 'preview' uses PREVIEW_MAX_SIZE and a different cache name
+    $sizeParam = isset($_GET['s']) ? (string)$_GET['s'] : 'thumb';
+    $isPreview = ($sizeParam === 'preview');
+    // build suffix name for preview: file_preview.ext
+    $suffixName = $blobName;
+    if ($isPreview) {
+        $dot = strrpos($blobName, '.');
+        if ($dot === false) { $suffixName = $blobName . '_preview'; }
+        else { $suffixName = substr($blobName, 0, $dot) . '_preview' . substr($blobName, $dot); }
+    }
+    $thumbName = $isPreview ? $suffixName : $blobName;
 
-    // Try to serve existing thumb
+    // Try to serve existing thumb (new naming). If not found, try legacy preview/ prefix and copy to new name.
     try {
         $thumb = $client->getBlob($thumbsContainer, $thumbName);
         $props = $thumb->getProperties();
@@ -83,6 +93,28 @@ try {
         fpassthru($thumb->getContentStream());
         exit;
     } catch (\Throwable $e) {
+        if ($isPreview) {
+            // legacy path fallback
+            $legacyName = 'preview/' . $blobName;
+            try {
+                $thumb = $client->getBlob($thumbsContainer, $legacyName);
+                $props = $thumb->getProperties();
+                $ct = $props->getContentType() ?: 'image/jpeg';
+                $data = stream_get_contents($thumb->getContentStream());
+                if ($data !== false) {
+                    // copy to new naming for future hits
+                    $opts = new CreateBlockBlobOptions();
+                    $opts->setContentType($ct);
+                    $client->createBlockBlob($thumbsContainer, $thumbName, $data, $opts);
+                    header('Content-Type: ' . $ct);
+                    header('Content-Length: ' . strlen($data));
+                    header('Cache-Control: private, max-age=86400');
+                    echo $data; exit;
+                }
+            } catch (\Throwable $e2) {
+                // fall through to generate
+            }
+        }
         // proceed to generate
     }
 
@@ -109,7 +141,8 @@ try {
 
     $srcW = imagesx($im); $srcH = imagesy($im);
     // Sizing and quality from env with sane defaults
-    $maxSize = (int) (getenv('THUMB_MAX_SIZE') !== false ? getenv('THUMB_MAX_SIZE') : 360);
+    $maxEnv = $isPreview ? getenv('PREVIEW_MAX_SIZE') : getenv('THUMB_MAX_SIZE');
+    $maxSize = (int) ($maxEnv !== false ? $maxEnv : ($isPreview ? 1200 : 360));
     if ($maxSize < 16) { $maxSize = 16; }
     if ($maxSize > 4096) { $maxSize = 4096; }
     $jpegQuality = (int) (getenv('THUMB_QUALITY') !== false ? getenv('THUMB_QUALITY') : 82);

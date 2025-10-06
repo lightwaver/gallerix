@@ -105,9 +105,20 @@ export default function Lightbox({ items, startIndex = 0, onClose }) {
     if (!n) return
     const preload = (idx) => {
       const it = items[idx]
-      if (it && it.type === 'image' && it.url) {
+      if (it && it.type === 'image') {
+        const base = it.thumbUrl || it.url
+        if (!base) return
+        let src = base
+        try {
+          const u = new URL(base, window.location.origin)
+          u.searchParams.set('s', 'preview')
+          src = u.toString()
+        } catch {
+          const sep = base.includes('?') ? '&' : '?'
+          src = `${base}${sep}s=preview`
+        }
         const img = new Image()
-        img.src = it.url
+        img.src = src
       }
     }
     preload((index + 1) % n)
@@ -198,7 +209,23 @@ function SlideMedia({ it }) {
       </div>
     )
   }
-  return <img src={it.url} alt={it?.name || ''} style={styles.media} draggable={false} fetchpriority="high" />
+  // For images, use preview-sized proxy to save bandwidth while keeping download link to original
+  const previewUrl = React.useMemo(() => {
+    if (!it) return null
+    if (it.type !== 'image') return it.url
+    const base = it.thumbUrl || it.url
+    if (!base) return it.url
+    try {
+      const u = new URL(base, window.location.origin)
+      u.searchParams.set('s', 'preview')
+      return u.toString()
+    } catch {
+      // Fallback for relative URLs without base
+      const sep = base.includes('?') ? '&' : '?'
+      return `${base}${sep}s=preview`
+    }
+  }, [it?.url])
+  return <img src={previewUrl} alt={it?.name || ''} style={styles.media} draggable={false} fetchpriority="high" />
 }
 
 const styles = {
