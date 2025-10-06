@@ -46,7 +46,7 @@ jobs:
                 sshEndpoint: 'gallerix-sftp' # Service Connection name (SSH)
                 sourceFolder: '$(Pipeline.Workspace)/drop/site'
                 contents: '**'
-                targetFolder: '/var/www/gallerix'
+                targetFolder: '$(deployPath)'
                 cleanTargetFolder: true
 
             - task: CopyFilesOverSSH@0
@@ -55,7 +55,7 @@ jobs:
                 sshEndpoint: 'gallerix-sftp' # Service Connection name (SSH)
                 sourceFolder: '$(Pipeline.Workspace)/drop/api'
                 contents: '**'
-                targetFolder: '/var/www/gallerix/api'
+                targetFolder: '$(deployPath)/api'
                 cleanTargetFolder: false
 
             # Optional: remote commands (e.g., composer install on server if needed)

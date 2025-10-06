@@ -5,6 +5,35 @@ Small photo & video gallery using:
 - React frontend (Vite)
 - Azure Blob Storage (config/data/thumbs containers)
 
+## Quickstart
+
+1) Prerequisites
+- Azure Storage account with three containers: `config`, `data`, `thumbs`
+- PHP 8.1+, Composer, Node.js 18+
+
+2) Configure Azure config files (upload to `config` container)
+- `users.json` (with bcrypt `passwordHash`), `roles.json`, `galleries.json`
+
+3) Backend env
+- Copy `backend-php/.env.example` to `backend-php/.env`
+- Set storage connection + `JWT_SECRET` (change from default)
+
+4) Run locally
+```
+cd backend-php && composer install
+php -S 127.0.0.1:8000 -t public
+```
+```
+cd frontend-react && npm install
+npm run dev
+```
+
+5) Frontend runtime config
+- Edit `frontend-react/public/gallerix.config.json` and set `{ "backendUrl": "/api" }` for same-origin with subfolder, or full API origin.
+
+6) Static hosting (optional)
+- Serve built frontend statically; map PHP API under `/api`. Set `PUBLIC_BASE_URL=/api` in backend env.
+
 ## Features
 - Public galleries: Galleries with `roles.view` containing `public` are visible without login and accessible from the Login screen.
 - Media proxy endpoints:
@@ -120,6 +149,24 @@ Configure your web server to:
 Secrets handling:
 - `.env` is not stored in repo or artifacts; it’s injected at deploy from Secure Files
 - SSH credentials are stored in an Azure DevOps Service Connection and not logged
+
+### Azure DevOps configuration
+
+1) Variable Group
+- Create a Variable Group, e.g., `gallerix-secrets` (match `build/pipeline.yaml`), add any non-file secrets as variables.
+
+2) Secure Files
+- Upload your backend `.env` to Library > Secure files with the name `backend-env` (or adjust `BackendEnvSecureFile` in `pipeline.yaml`).
+
+3) Service Connection (SSH)
+- Create an SSH service connection named `gallerix-sftp` pointing to your target server (recommended: SSH key). The pipeline never prints secrets.
+
+4) Pipeline setup
+- Set pipeline path to `build/pipeline.yaml`.
+- Adjust target folders in `build/deploy.yaml` (`/var/www/gallerix` and `/var/www/gallerix/api`) to match your host.
+
+5) Optional
+- Add environments and approvals to the deployment job.
 
 ## Troubleshooting uploads
 If uploads fail, error messages include the reason and PHP limits. Common issues:
