@@ -47,7 +47,7 @@ jobs:
                 sourceFolder: '$(Pipeline.Workspace)/drop/site'
                 contents: '**'
                 targetFolder: '$(deployPath)'
-                cleanTargetFolder: false
+                cleanTargetFolder: true
 
             - task: CopyFilesOverSSH@0
               displayName: 'Upload API contents to SFTP'
