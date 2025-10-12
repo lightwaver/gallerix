@@ -199,7 +199,7 @@ class GalleryService
                     $mime = (string)$blob->getProperties()->getContentType();
                     if (str_starts_with($mime, 'image')) {
                         $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
-                        $path = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file) . '&s=preview';
+                        $path = 'api/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file) . '&s=preview';
                         if (!empty($authToken)) { $path .= '&t=' . rawurlencode($authToken); }
                         return $publicBase ? ($publicBase . $path) : $path;
                     }
