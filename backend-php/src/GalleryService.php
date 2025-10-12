@@ -84,7 +84,7 @@ class GalleryService
                 $path .= '&t=' . rawurlencode($token);
             }
             $url = $publicBase ? ($publicBase . $path) : $path;
-            $thumbPath = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
+            $thumbPath = 'api/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
             if ($token) { $thumbPath .= '&t=' . rawurlencode($token); }
             $thumbUrl = $publicBase ? ($publicBase . $thumbPath) : $thumbPath;
             $mime = $blob->getProperties()->getContentType();

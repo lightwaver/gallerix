@@ -10,11 +10,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true
       },
-      '/image.php': {
+      '/api/image.php': {
         target: 'http://localhost:8000',
         changeOrigin: true
       },
-      '/thumb.php': {
+      '/api/thumb.php': {
         target: 'http://localhost:8000',
         changeOrigin: true
       }
