@@ -18,14 +18,19 @@ variables:
   - name: BackendEnvSecureFile
     value: backend-env
 
-jobs:
-  - template: build.yaml
-    parameters:
-      VariableGroup: ${{ variables.VariableGroup }}
-      BackendEnvSecureFile: ${{ variables.BackendEnvSecureFile }}
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - template: build.yaml
+        parameters:
+          VariableGroup: ${{ variables.VariableGroup }}
+          BackendEnvSecureFile: ${{ variables.BackendEnvSecureFile }}
 
-  - template: deploy.yaml
-    dependsOn:
-      - Build
-    parameters:
-      VariableGroup: ${{ variables.VariableGroup }}
+  - stage: Deploy
+    displayName: Deploy
+    dependsOn: Build
+    jobs:
+      - template: deploy.yaml
+        parameters:
+          VariableGroup: ${{ variables.VariableGroup }}
