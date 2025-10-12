@@ -20,10 +20,12 @@ variables:
 
 jobs:
   - template: build.yaml
+    name: Build
     parameters:
       VariableGroup: ${{ variables.VariableGroup }}
       BackendEnvSecureFile: ${{ variables.BackendEnvSecureFile }}
 
   - template: deploy.yaml
+    requires: Build
     parameters:
       VariableGroup: ${{ variables.VariableGroup }}
