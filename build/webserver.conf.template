@@ -1,0 +1,38 @@
+# Web server (nginx) config template for Gallerix
+# Variables replaced during pipeline: __SERVER_NAME__, __ROOT_PATH__, __API_PATH__, __PHP_FPM_SOCK__
+# ROOT_PATH points to the deployed static site directory (deployPath)
+# API_PATH points to the /api/public directory inside deployPath
+
+server {
+    listen 80;
+    server_name __SERVER_NAME__;
+
+    root __ROOT_PATH__;
+    index index.html;
+
+    # Serve static assets directly
+    location /assets/ { try_files $uri =404; }
+
+    # API (PHP) routing
+    # Serve files under /api from the api/public folder
+    location /api/ {
+        alias __API_PATH__/;
+        index index.php;
+        # Keep the URI prefix so the PHP handler below matches /api/index.php
+        try_files $uri $uri/ /api/index.php?$query_string;
+    }
+
+    # PHP handler for /api paths (works with alias and captures the file path)
+    location ~ ^/api/(.+\.php)$ {
+        alias __API_PATH__/$1;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME __API_PATH__/$1;
+        fastcgi_param SCRIPT_NAME /api/$1;
+        fastcgi_pass __PHP_FPM_SOCK__;
+    }
+
+    # SPA fallback (exclude /api)
+    location / {
+        try_files $uri /index.html;
+    }
+}
