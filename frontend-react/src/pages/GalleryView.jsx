@@ -11,18 +11,18 @@ function Thumb({ item, onClick }) {
   const isPdf = item.type === 'pdf'
   return (
     <Card>
-      <div onClick={onClick} style={{ cursor:'zoom-in' }}>
+      <div onClick={onClick} style={{ cursor: 'zoom-in' }}>
         {isVideo ? (
           <video src={item.url} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} muted />
         ) : isPdf ? (
-          <div style={{ width:'100%', height:180, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, background:'var(--ppo-surface-2)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize:48, color:'var(--ppo-primary)' }}>picture_as_pdf</span>
+          <div style={{ width: '100%', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'var(--ppo-surface-2)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--ppo-primary)' }}>picture_as_pdf</span>
           </div>
         ) : (
           <img src={item.thumbUrl || item.url} alt={item.name} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8 }} />
         )}
       </div>
-      <div style={{ fontSize: 12, marginTop: 8, color:'var(--ppo-muted)' }}>{item.name}</div>
+      <div style={{ fontSize: 12, marginTop: 8, color: 'var(--ppo-muted)' }}>{item.name}</div>
     </Card>
   )
 }
@@ -40,7 +40,16 @@ export default function GalleryView() {
 
   useEffect(() => {
     api.listItems(name)
-      .then(r => { setItems(r.items || []); setTitle(r.gallery?.title || name); setCanUpload(!!r.gallery?.canUpload) })
+      .then(async r => {
+        for (var it in r.items) {
+          if (it.thumbUrl) {
+            it.thumbUrl = await resolveUrl(it.thumbUrl);
+          }
+        }
+        setItems(r.items || []); 
+        setTitle(r.gallery?.title || name); 
+        setCanUpload(!!r.gallery?.canUpload)
+      })
       .catch(e => setError(e.message))
   }, [name])
 
@@ -66,9 +75,9 @@ export default function GalleryView() {
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
       {canUpload && (
         <Card>
-          <div {...getRootProps()} style={{ border: '2px dashed var(--ppo-border)', padding: 16, background: isDragActive ? 'var(--ppo-surface-2)' : 'transparent', borderRadius: 10, textAlign:'center' }}>
+          <div {...getRootProps()} style={{ border: '2px dashed var(--ppo-border)', padding: 16, background: isDragActive ? 'var(--ppo-surface-2)' : 'transparent', borderRadius: 10, textAlign: 'center' }}>
             <input {...getInputProps()} />
-            <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>upload</span>
+            <span className="material-symbols-outlined" style={{ color: 'var(--ppo-primary)' }}>upload</span>
             <div>{uploading ? 'Uploading…' : 'Drag & drop files here, or click to select'}</div>
           </div>
         </Card>
