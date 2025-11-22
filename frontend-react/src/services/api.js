@@ -39,14 +39,14 @@ async function request(path, opts = {}) {
 }
 
 export const api = {
-  login: (username, password) => request('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  me: () => request('/api/me'),
-  listGalleries: () => request('/api/galleries'),
-  createGallery: (payload) => request('/api/galleries', { method: 'POST', body: JSON.stringify(payload) }),
-  listItems: (name) => request(`/api/galleries/${encodeURIComponent(name)}/items`),
+  login: (username, password) => request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  me: () => request('/me'),
+  listGalleries: () => request('/galleries'),
+  createGallery: (payload) => request('/galleries', { method: 'POST', body: JSON.stringify(payload) }),
+  listItems: (name) => request(`/galleries/${encodeURIComponent(name)}/items`),
   upload: (name, file) => {
     const fd = new FormData()
     fd.append('file', file)
-    return request(`/api/galleries/${encodeURIComponent(name)}/upload`, { method: 'POST', body: fd })
+    return request(`/galleries/${encodeURIComponent(name)}/upload`, { method: 'POST', body: fd })
   }
 }
