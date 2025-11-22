@@ -41,16 +41,7 @@ export default function GalleryView() {
   useEffect(() => {
     api.listItems(name)
       .then(async r => {
-        debugger;
-        for (var it of r.items) {
-          if (it.thumbUrl) {
-            it.thumbUrl = await resolveUrl(it.thumbUrl);
-          }
-          if (it.url) {
-            it.url = await resolveUrl(it.url);
-          }
-        }
-        setItems(r.items || []); 
+        await setItemsWithUrls(r, setItems) 
         setTitle(r.gallery?.title || name); 
         setCanUpload(!!r.gallery?.canUpload)
       })
@@ -64,7 +55,7 @@ export default function GalleryView() {
         await api.upload(name, file)
       }
       const r = await api.listItems(name)
-      setItems(r.items || [])
+      await setItemsWithUrls(r, setItems)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -103,3 +94,15 @@ export default function GalleryView() {
     </div>
   )
 }
+async function setItemsWithUrls(r, setItems) {
+  for (var it of r.items) {
+    if (it.thumbUrl) {
+      it.thumbUrl = await resolveUrl(it.thumbUrl)
+    }
+    if (it.url) {
+      it.url = await resolveUrl(it.url)
+    }
+  }
+  setItems(r.items || [])
+}
+

@@ -46,7 +46,10 @@ export const api = {
   listItems: (name) => request(`/galleries/${encodeURIComponent(name)}/items`),
   upload: (name, file) => {
     const fd = new FormData()
-    fd.append('file', file)
-    return request(`/galleries/${encodeURIComponent(name)}/upload`, { method: 'POST', body: fd })
+    fd.append('file', file) // field name must be 'file'
+    return request(`/galleries/${encodeURIComponent(name)}/upload`, {
+      method: 'POST',
+      body: fd
+    })
   }
 }
