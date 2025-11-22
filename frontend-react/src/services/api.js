@@ -54,7 +54,7 @@ export const api = {
     const token = getToken()
     const url = await resolveUrl(`/galleries/${encodeURIComponent(name)}/upload`)
     const fd = new FormData()
-    fd.append('file', file) // field name must be 'file'
+    fd.append('file', file)
 
     const xhr = new XMLHttpRequest()
     xhr.open('POST', url, true)
@@ -63,7 +63,12 @@ export const api = {
     if (xhr.upload && typeof onProgress === 'function') {
       xhr.upload.onprogress = e => {
         if (e.lengthComputable) {
-          onProgress(Math.round(e.loaded / e.total * 100))
+          // Pass both raw numbers and a percent
+            onProgress({
+              loaded: e.loaded,
+              total: e.total,
+              percent: Math.round(e.loaded / e.total * 100)
+            })
         }
       }
     }
@@ -71,11 +76,7 @@ export const api = {
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {})
-          } catch {
-            resolve({})
-          }
+          try { resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {}) } catch { resolve({}) }
         } else {
           try {
             const j = JSON.parse(xhr.responseText || '{}')

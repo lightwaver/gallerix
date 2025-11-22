@@ -34,7 +34,8 @@ export default function GalleryView() {
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(null)
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState(0)          // current file percent
+  const [overallProgress, setOverallProgress] = useState(0) // all files percent
 
   const user = getUser()
   const [canUpload, setCanUpload] = useState(false)
@@ -51,11 +52,27 @@ export default function GalleryView() {
 
   const onDrop = async (acceptedFiles) => {
     setUploading(true)
+    setError('')
     setProgress(0)
+    setOverallProgress(0)
+
+    // Pre-calc total bytes
+    const totalBytes = acceptedFiles.reduce((a, f) => a + f.size, 0)
+    let uploadedBytesSoFar = 0
+
     try {
       for (const file of acceptedFiles) {
-        await api.upload(name, file, p => setProgress(p))
-        setProgress(0) // reset between files (remove if you want continuous)
+        await api.upload(name, file, prog => {
+          // prog: { loaded, total, percent }
+          setProgress(prog.percent)
+          // Bytes uploaded for this file so far + bytes from previous completed files
+          const currentFileUploaded = prog.loaded
+          const overallLoaded = uploadedBytesSoFar + currentFileUploaded
+          setOverallProgress(Math.round(overallLoaded / totalBytes * 100))
+        })
+        // After each file completes, add full size to accumulator
+        uploadedBytesSoFar += file.size
+        setProgress(0)
       }
       const r = await api.listItems(name)
       await setItemsWithUrls(r, setItems)
@@ -64,6 +81,7 @@ export default function GalleryView() {
     } finally {
       setUploading(false)
       setProgress(0)
+      setTimeout(() => setOverallProgress(0), 800) // fade reset
     }
   }
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
@@ -79,11 +97,21 @@ export default function GalleryView() {
             <span className="material-symbols-outlined" style={{ color: 'var(--ppo-primary)' }}>upload</span>
             <div>{uploading ? 'Uploading…' : 'Drag & drop files here, or click to select'}</div>
             {uploading && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ height: 8, background: 'var(--ppo-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ width: progress + '%', height: '100%', background: 'var(--ppo-primary)', transition: 'width .15s linear' }} />
+              <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, marginBottom: 4, color: 'var(--ppo-muted)' }}>Current file</div>
+                  <div style={{ height: 8, background: 'var(--ppo-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: progress + '%', height: '100%', background: 'var(--ppo-primary)', transition: 'width .15s linear' }} />
+                  </div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--ppo-muted)' }}>{progress}%</div>
                 </div>
-                <div style={{ fontSize: 11, marginTop: 4, color: 'var(--ppo-muted)' }}>{progress}%</div>
+                <div>
+                  <div style={{ fontSize: 11, marginBottom: 4, color: 'var(--ppo-muted)' }}>Overall</div>
+                  <div style={{ height: 8, background: 'var(--ppo-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: overallProgress + '%', height: '100%', background: 'var(--ppo-primary)', transition: 'width .15s linear' }} />
+                  </div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--ppo-muted)' }}>{overallProgress}%</div>
+                </div>
               </div>
             )}
           </div>
