@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { api } from '../services/api.js'
+import { api, resolveUrl } from '../services/api.js'
 import { getUser } from '../services/auth.js'
 import { useDropzone } from 'react-dropzone'
 import { Card, Grid, Button } from '../components/ui.jsx'
@@ -41,9 +41,13 @@ export default function GalleryView() {
   useEffect(() => {
     api.listItems(name)
       .then(async r => {
-        for (var it in r.items) {
+        debugger;
+        for (var it of r.items) {
           if (it.thumbUrl) {
             it.thumbUrl = await resolveUrl(it.thumbUrl);
+          }
+          if (it.url) {
+            it.url = await resolveUrl(it.url);
           }
         }
         setItems(r.items || []); 
