@@ -56,7 +56,6 @@ export default function Login() {
         </div>
         {publicGalleries.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <h3 style={{ margin: '8px 0' }}>Public galleries</h3>
             <Grid>
               {publicGalleries.map(g => (
                 <a key={g.name} href={`/g/${encodeURIComponent(g.name)}`} style={{ textDecoration:'none', color:'inherit' }}>

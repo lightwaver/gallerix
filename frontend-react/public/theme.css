@@ -80,3 +80,10 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--ppo-primary-contrast);
   border-color: var(--ppo-primary);
 }
+
+/* Hide brand text on small screens when authenticated */
+@media (max-width: 640px) {
+  body.is-auth .mobileHidden {
+    display: none;
+  }
+}

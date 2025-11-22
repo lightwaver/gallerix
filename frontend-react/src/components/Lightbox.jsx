@@ -234,8 +234,8 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   },
   content: {
-    position: 'relative', width: 'min(96vw, 1200px)', height: 'min(92vh, 900px)',
-    background: 'var(--ppo-card)', borderRadius: 12, boxShadow: 'var(--ppo-elevation-3)',
+    position: 'relative', width: 'min(99vw, 1200px)', height: 'min(99vh, 900px)',
+    background: 'var(--ppo-card)', borderRadius: 10, boxShadow: 'var(--ppo-elevation-3)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden'
   },
   topBar: {

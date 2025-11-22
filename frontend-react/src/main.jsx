@@ -8,27 +8,35 @@ import GalleryView from './pages/GalleryView.jsx'
 import Settings from './pages/Settings.jsx'
 import { getToken, getUser, setAuth, clearAuth } from './services/auth.js'
 
+
+function applyAuthClass() {
+  const u = getUser()
+  if (u) document.body.classList.add('is-auth')
+  else document.body.classList.remove('is-auth')
+}
+
 function AppLayout({ children }) {
   const user = getUser()
   const navigate = useNavigate()
   const location = useLocation()
+  applyAuthClass();
   return (
     <div style={{ fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', background:'var(--ppo-bg)', minHeight:'100vh', color:'var(--ppo-text)' }}>
       <Container>
         <header style={{ display: 'flex', alignItems: 'center', margin: '16px 0', gap: 16 }}>
           <div style={{ display:'flex', alignItems:'center', gap: 8, minWidth: 0 }}>
             <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>photo_library</span>
-            <h1 style={{ margin: 0, fontSize: 22, whiteSpace:'nowrap' }}>Gallerix</h1>
+            <h1 style={{ margin: 0, fontSize: 22, whiteSpace:'nowrap' }} className='mobileHidden' >Gallerix</h1>
           </div>
           <nav className="topnav" style={{ marginLeft: 8 }}>
             <NavLink to="/" end className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
               <span className="material-symbols-outlined" style={{ fontSize:18 }}>collections</span>
-              <span>Galleries</span>
+              <span className="mobileHidden">Galleries</span>
             </NavLink>
             {user?.roles?.includes('admin') && (
               <NavLink to="/settings" className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
                 <span className="material-symbols-outlined" style={{ fontSize:18 }}>settings</span>
-                <span>Settings</span>
+                <span className="mobileHidden">Settings</span>
               </NavLink>
             )}
           </nav>
@@ -37,7 +45,9 @@ function AppLayout({ children }) {
               <>
                 <span className="material-symbols-outlined" title="User">account_circle</span>
                 <span>{user.username}</span>
-                <Button variant="outline" icon="logout" onClick={() => { clearAuth(); navigate('/login') }}>Logout</Button>
+                <Button variant="outline" icon="logout" onClick={() => { clearAuth(); navigate('/login') }}>
+                  <span className='mobileHidden'>Logout</span>
+                  </Button>
               </>
             ) : (
               <NavLink to="/login" className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>Login</NavLink>
