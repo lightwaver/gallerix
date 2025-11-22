@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { adminApi } from '../services/adminApi.js'
 import { Card, Container, Tabs, Input, TextArea, Button } from '../components/ui.jsx'
 
-function HeaderTabs({ tab, setTab }) { return <Tabs tabs={['Users','Roles','Galleries']} current={tab} onChange={setTab} /> }
+function HeaderTabs({ tab, setTab }) { return <Tabs tabs={['Galleries', 'Users','Functions & Roles']} current={tab} onChange={setTab} /> }
 
 function UsersTab() {
   const [users, setUsers] = useState([])
@@ -104,7 +104,7 @@ function RolesTab() {
 
   return (
     <div>
-      <h3>Roles</h3>
+      <h3>Functions & Roles</h3>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
       <div style={{ display:'grid', gap:12 }}>
         {perms.map(perm => (
@@ -121,8 +121,8 @@ function RolesTab() {
               ))}
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10 }}>
-              <Input placeholder="Add role…" value={pendingAdds[perm] || ''} onChange={e => setPendingAdds(s => ({ ...s, [perm]: e.target.value }))} />
-              <Button onClick={() => addRole(perm)} icon="add">Add</Button>
+              <Input placeholder="Add…" value={pendingAdds[perm] || ''} onChange={e => setPendingAdds(s => ({ ...s, [perm]: e.target.value }))} />
+              <Button onClick={() => addRole(perm)} icon="add"></Button>
             </div>
           </Card>
         ))}
@@ -173,7 +173,7 @@ function GalleriesTab() {
     <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px', border:'1px solid var(--ppo-border)', borderRadius:999, background:'var(--ppo-surface-2)', fontSize:12 }}>
       {label}
       <button onClick={onRemove} title="Remove" style={{ border:'none', background:'transparent', cursor:'pointer', lineHeight:1, padding:0 }}>
-        <span className="material-symbols-outlined" style={{ fontSize:16 }}>close</span>
+        <span className="material-symbols-outlined" style={{ fontSize:20, color:'white' }}>close</span>
       </button>
     </span>
   )
@@ -233,7 +233,7 @@ export default function Settings(){
       <h2>Settings</h2>
       <HeaderTabs tab={tab} setTab={setTab} />
       {tab === 'Users' && <UsersTab />}
-      {tab === 'Roles' && <RolesTab />}
+      {tab === 'Functions & Roles' && <RolesTab />}
       {tab === 'Galleries' && <GalleriesTab />}
     </div>
   )
