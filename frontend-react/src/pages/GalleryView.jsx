@@ -34,6 +34,7 @@ export default function GalleryView() {
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(null)
+  const [progress, setProgress] = useState(0)
 
   const user = getUser()
   const [canUpload, setCanUpload] = useState(false)
@@ -50,9 +51,11 @@ export default function GalleryView() {
 
   const onDrop = async (acceptedFiles) => {
     setUploading(true)
+    setProgress(0)
     try {
       for (const file of acceptedFiles) {
-        await api.upload(name, file)
+        await api.upload(name, file, p => setProgress(p))
+        setProgress(0) // reset between files (remove if you want continuous)
       }
       const r = await api.listItems(name)
       await setItemsWithUrls(r, setItems)
@@ -60,6 +63,7 @@ export default function GalleryView() {
       setError(e.message)
     } finally {
       setUploading(false)
+      setProgress(0)
     }
   }
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
@@ -74,6 +78,14 @@ export default function GalleryView() {
             <input {...getInputProps()} />
             <span className="material-symbols-outlined" style={{ color: 'var(--ppo-primary)' }}>upload</span>
             <div>{uploading ? 'Uploading…' : 'Drag & drop files here, or click to select'}</div>
+            {uploading && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ height: 8, background: 'var(--ppo-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ width: progress + '%', height: '100%', background: 'var(--ppo-primary)', transition: 'width .15s linear' }} />
+                </div>
+                <div style={{ fontSize: 11, marginTop: 4, color: 'var(--ppo-muted)' }}>{progress}%</div>
+              </div>
+            )}
           </div>
         </Card>
       )}
