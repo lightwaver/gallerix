@@ -10,7 +10,7 @@ async function getRuntimeConfig() {
   return runtimeConfigPromise
 }
 
-async function resolveUrl(path) {
+export async function resolveUrl(path) {
   const cfg = await getRuntimeConfig()
   const base = cfg.backendUrl || ''
   if (!base) return path
