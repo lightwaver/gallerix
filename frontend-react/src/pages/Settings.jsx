@@ -26,6 +26,13 @@ function UsersTab() {
   }
 
   const remove = async (u) => { if (confirm(`Delete ${u.username}?`)) { await adminApi.deleteUser(u.username); load() } }
+  const edit = (u) => {
+    setForm({
+      username: u.username || '',
+      roles: (u.roles || []).join(', '),
+      password: '' // never prefill password
+    })
+  }
 
   return (
     <div>
@@ -38,7 +45,10 @@ function UsersTab() {
               <div style={{ fontWeight:600 }}>{u.username}</div>
               <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>roles: {(u.roles||[]).join(', ')}</div>
             </div>
-            <Button variant="outline" icon="delete" onClick={() => remove(u)}>Delete</Button>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="outline" icon="edit" onClick={() => edit(u)}>Edit</Button>
+              <Button variant="outline" icon="delete" onClick={() => remove(u)}>Delete</Button>
+            </div>
           </div>
         ))}
       </Card>
