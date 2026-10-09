@@ -5,6 +5,7 @@ namespace Gallerix;
 
 use MicrosoftAzure\Storage\Blob\Models\ListBlobsOptions;
 use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
+use MicrosoftAzure\Storage\Common\Exceptions\ServiceException;
 
 class GalleryService
 {
@@ -114,13 +115,46 @@ class GalleryService
             error_log('[Gallerix] Upload failed: ' . $msg);
             throw new \RuntimeException($msg);
         }
+        $filename = MediaPolicy::sanitizeFilename((string)($file['name'] ?? ''));
+        if ($filename === null) {
+            throw new \InvalidArgumentException('Invalid file name');
+        }
+        $type = MediaPolicy::detectType((string)$file['tmp_name'], $filename);
+        if (!MediaPolicy::isAllowedType($type)) {
+            throw new \InvalidArgumentException('File type not allowed' . ($type ? " ($type)" : ''));
+        }
         $client = $this->azure->getBlobClient();
-        $blobName = rtrim($galleryName, '/') . '/' . $file['name'];
+        $prefix = rtrim($galleryName, '/') . '/';
+        $filename = $this->uniqueFilename($prefix, $filename);
         $options = new CreateBlockBlobOptions();
-        if (!empty($file['type'])) $options->setContentType($file['type']);
+        $options->setContentType($type);
         $content = fopen($file['tmp_name'], 'rb');
-        $client->createBlockBlob($this->dataContainer, $blobName, $content, $options);
-        return ['ok' => true, 'name' => $file['name']];
+        $client->createBlockBlob($this->dataContainer, $prefix . $filename, $content, $options);
+        return ['ok' => true, 'name' => $filename];
+    }
+
+    /** Appends " (n)" before the extension until the name does not collide with an existing blob. */
+    private function uniqueFilename(string $prefix, string $filename): string
+    {
+        $ext = pathinfo($filename, PATHINFO_EXTENSION);
+        $base = pathinfo($filename, PATHINFO_FILENAME);
+        $candidate = $filename;
+        for ($i = 1; $this->blobExists($prefix . $candidate); $i++) {
+            if ($i > 1000) throw new \RuntimeException('Could not find a free file name');
+            $candidate = $base . " ($i)" . ($ext !== '' ? '.' . $ext : '');
+        }
+        return $candidate;
+    }
+
+    private function blobExists(string $blobName): bool
+    {
+        try {
+            $this->azure->getBlobClient()->getBlobProperties($this->dataContainer, $blobName);
+            return true;
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 404) return false;
+            throw $e;
+        }
     }
 
     /**

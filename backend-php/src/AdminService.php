@@ -72,12 +72,20 @@ class AdminService
     // Galleries
     public function listGalleries(): array { return $this->config->galleries(); }
     public function upsertGallery(array $gallery): array {
+        $name = (string)($gallery['name'] ?? '');
+        if (!MediaPolicy::isSafeSegment($name)) { throw new \InvalidArgumentException('Invalid gallery name'); }
         $gals = $this->config->galleries();
         $found = false;
         foreach ($gals as &$g) {
-            if (($g['name'] ?? '') === ($gallery['name'] ?? '')) { $g = array_merge($g, $gallery); $found = true; break; }
+            if (($g['name'] ?? '') === $name) { $g = array_merge($g, $gallery); $found = true; break; }
         }
-        if (!$found) $gals[] = $gallery;
+        unset($g);
+        if (!$found) {
+            if (!MediaPolicy::isValidNewGalleryName($name)) {
+                throw new \InvalidArgumentException('Invalid gallery name (allowed: a-z, 0-9, "-", "_"; max 64 chars)');
+            }
+            $gals[] = $gallery;
+        }
         $this->config->saveGalleries($gals);
         return $gallery;
     }

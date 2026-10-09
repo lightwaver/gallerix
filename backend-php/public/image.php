@@ -25,6 +25,7 @@ use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
 use Gallerix\GalleryService;
+use Gallerix\MediaPolicy;
 
 // Load env
 $dotenv = Dotenv::createUnsafeImmutable(__DIR__ . '/..');
@@ -33,7 +34,7 @@ $dotenv->safeLoad();
 // Read inputs
 $gallery = isset($_GET['g']) ? (string)$_GET['g'] : '';
 $file = isset($_GET['f']) ? (string)$_GET['f'] : '';
-if ($gallery === '' || $file === '') {
+if (!MediaPolicy::isSafeSegment($gallery) || !MediaPolicy::isSafeSegment($file)) {
     http_response_code(400);
     echo 'Bad request';
     exit;
@@ -83,9 +84,10 @@ try {
     $blobName = rtrim($gallery, '/') . '/' . $file;
     $blob = $client->getBlob($container, $blobName);
     $props = $blob->getProperties();
-    $ct = $props->getContentType() ?: 'application/octet-stream';
     $len = $props->getContentLength();
 
+    // Only allowlisted media types are served inline; anything else (e.g. legacy HTML/SVG uploads) is forced to download
+    $ct = MediaPolicy::sendSafeMediaHeaders($props->getContentType(), $file);
     header('Content-Type: ' . $ct);
     if ($len !== null) header('Content-Length: ' . $len);
     header('Cache-Control: private, max-age=0, no-cache');

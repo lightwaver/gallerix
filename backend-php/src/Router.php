@@ -151,7 +151,13 @@ class Router
             echo json_encode(['error' => 'Missing file field "file"']);
             return;
         }
-        $res = $this->galleries->upload($name, $_FILES['file']);
+        try {
+            $res = $this->galleries->upload($name, $_FILES['file']);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+            return;
+        }
         echo json_encode($res);
     }
 
@@ -207,11 +213,22 @@ class Router
         $desc = (string)($input['description'] ?? '');
         if ($name === '' && $title !== '') {
             $name = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $title) ?? '');
-            $name = trim($name, '-');
+            $name = trim(substr(trim($name, '-'), 0, 64), '-');
         }
         if ($name === '') {
             http_response_code(400);
             echo json_encode(['error' => 'Gallery name or title required']);
+            return;
+        }
+        if (!MediaPolicy::isValidNewGalleryName($name)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid gallery name (allowed: a-z, 0-9, "-", "_"; max 64 chars)']);
+            return;
+        }
+        // Creating must never modify an existing gallery (would let creators rewrite its roles)
+        if ($this->galleries->getGalleryByName($name)) {
+            http_response_code(409);
+            echo json_encode(['error' => 'A gallery with this name already exists']);
             return;
         }
         // Build roles: include admin and current user's roles; merge with payload roles if provided

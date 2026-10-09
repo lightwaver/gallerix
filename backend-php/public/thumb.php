@@ -13,6 +13,7 @@ use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
 use Gallerix\GalleryService;
+use Gallerix\MediaPolicy;
 use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
 
 // Load env
@@ -34,11 +35,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 
 $gallery = isset($_GET['g']) ? (string)$_GET['g'] : '';
 $file = isset($_GET['f']) ? (string)$_GET['f'] : '';
-if ($gallery === '' || $file === '') {
+if (!MediaPolicy::isSafeSegment($gallery) || !MediaPolicy::isSafeSegment($file)) {
     http_response_code(400);
     echo 'Bad request';
     exit;
 }
+// Thumbnails are always raster images we generated; still forbid sniffing and active content
+MediaPolicy::sendSafeMediaHeaders('image/jpeg', $file);
 
 try {
     $azure = new AzureClient();
