@@ -16,7 +16,7 @@ Small photo & video gallery using:
 
 3) Backend env
 - Copy `backend-php/.env.example` to `backend-php/.env`
-- Set storage connection + `JWT_SECRET` (change from default)
+- Set storage connection + `JWT_SECRET` (random, at least 32 bytes, e.g. `openssl rand -base64 48`)
 
 4) Run locally
 ```
@@ -37,7 +37,7 @@ npm run dev
 ## Features
 - Public galleries: Galleries with `roles.view` containing `public` are visible without login and accessible from the Login screen.
 - Media proxy endpoints:
-  - `public/image.php` streams original files with auth/role checks. Public galleries allow access without a token; private ones require a JWT (via Authorization header, `gallerix_token` cookie, or `?t=` query).
+  - `public/image.php` streams original files with auth/role checks. Public galleries allow access without a token; for private ones the API hands out short-lived signed URLs (`e`/`sig` parameters, bound to gallery + file) after its permission check. API clients may alternatively send an `Authorization: Bearer` header. Session tokens are never placed in URLs or cookies.
   - `public/thumb.php` generates and caches thumbnails and preview images on-demand using GD. Non-images return a tiny PNG placeholder.
 - Thumbnails & previews:
   - Grid thumbnails sized by `THUMB_MAX_SIZE`.
@@ -51,6 +51,7 @@ npm run dev
 - Roles & permissions:
   - Global `createGallery` permission controls who can create galleries.
   - Per-gallery `view`/`upload`/`admin` roles drive server-side checks; public galleries still compute `canUpload` if a logged-in user is present.
+  - Sessions: roles are re-read from `users.json` on every request, so deleting a user, changing roles or changing the password takes effect immediately (a password change invalidates existing sessions).
   - Admin Settings UI for users/roles/galleries. User passwords can be entered in plaintext in the UI; backend hashes them.
 - Gallery cover image: The first image’s preview is used as the title image in lists; includes a token for private galleries across API calls.
 - Storage cleanup: Deleting a gallery via Admin also removes its blobs from both `data` and `thumbs` containers.
@@ -84,15 +85,17 @@ Key env vars:
 - `AZURE_CONTAINER_CONFIG` (default: config)
 - `AZURE_CONTAINER_DATA` (default: data)
 - `AZURE_CONTAINER_THUMBS` (default: thumbs)
-- `JWT_SECRET` (required; change from default)
+- `JWT_SECRET` (required; at least 32 bytes — the backend refuses to run otherwise)
 - `JWT_ISSUER` (default: gallerix)
 - `JWT_EXPIRES_IN` (seconds; default: 86400)
 - `THUMB_MAX_SIZE` and `PREVIEW_MAX_SIZE` (pixel bounds)
+- `MEDIA_URL_TTL` (seconds; default: 7200) — minimum validity of signed media URLs (rounded up to the full hour)
 - `PUBLIC_BASE_URL` (optional, e.g., `/api` or full origin; used to prefix media URLs)
 
 ### API endpoints
 Auth & data:
 - POST `/api/login` → `{ token, user }`
+- POST `/api/logout` → `{ ok }` (clears the legacy media cookie of older versions)
 - GET `/api/me` → `{ user }` (requires Authorization)
 - GET `/api/galleries` → `{ galleries: [{ name, title, description, coverUrl }] }` (requires Authorization)
 - GET `/api/public-galleries` → `{ galleries: [...] }` (no auth)
@@ -105,7 +108,7 @@ Admin (admin role):
 - `/api/admin/galleries` (GET/POST/PUT/DELETE)
 
 Media proxy:
-- `GET /image.php?g=<gallery>&f=<file>[&t=<token>]` — original download/stream with role checks
+- `GET /image.php?g=<gallery>&f=<file>&e=<expiry>&sig=<signature>` — original download/stream with role checks
 - `GET /thumb.php?g=<gallery>&f=<file>&s=thumb|preview[&t=<token>]` — generates/serves cached images
 
 ## Frontend (React / Vite)

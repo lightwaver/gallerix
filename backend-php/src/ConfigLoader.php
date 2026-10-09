@@ -7,6 +7,8 @@ class ConfigLoader
 {
     private AzureClient $azure;
     private string $configContainer;
+    /** Per-request memo; each config blob is fetched from Azure at most once per request. */
+    private array $cache = [];
 
     public function __construct(AzureClient $azure)
     {
@@ -16,6 +18,7 @@ class ConfigLoader
 
     public function getJson(string $blobName): array
     {
+        if (isset($this->cache[$blobName])) return $this->cache[$blobName];
         $client = $this->azure->getBlobClient();
         $content = $client->getBlob($this->configContainer, $blobName)->getContentStream();
         $json = stream_get_contents($content);
@@ -26,7 +29,7 @@ class ConfigLoader
         if (!is_array($data)) {
             throw new \RuntimeException("Invalid JSON in $blobName");
         }
-        return $data;
+        return $this->cache[$blobName] = $data;
     }
 
     public function users(): array { return $this->getJson('users.json'); }
@@ -43,6 +46,7 @@ class ConfigLoader
         $opts = new \MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions();
         $opts->setContentType('application/json');
         $client->createBlockBlob($this->configContainer, $blobName, $json, $opts);
+        $this->cache[$blobName] = $data;
     }
 
     public function saveUsers(array $users): void { $this->putJson('users.json', $users); }

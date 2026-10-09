@@ -27,6 +27,10 @@ class Router
             $this->postLogin();
             return;
         }
+        if ($path === '/api/logout' && $method === 'POST') {
+            $this->postLogout();
+            return;
+        }
         if ($path === '/api/galleries' && $method === 'GET') {
             $this->getGalleries();
             return;
@@ -79,15 +83,20 @@ class Router
             echo json_encode(['error' => 'Invalid credentials']);
             return;
         }
-        // Set a cookie for media proxy convenience (HttpOnly to limit XSS)
-        setcookie('gallerix_token', $res['token'], [
-            'expires' => time() + 60 * 60 * 24 * 7,
+        echo json_encode($res);
+    }
+
+    private function postLogout(): void
+    {
+        // Media is served via signed URLs now; expire the legacy media cookie set by older versions
+        setcookie('gallerix_token', '', [
+            'expires' => 1,
             'path' => '/',
             'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
-        echo json_encode($res);
+        echo json_encode(['ok' => true]);
     }
 
     private function getGalleries(): void
@@ -126,8 +135,7 @@ class Router
             // Public gallery: try to detect logged-in user to decide canUpload
             $user = $this->auth->optionalAuth();
         }
-        $token = $user['token'] ?? null;
-        $items = $this->galleries->listItems($name, $token);
+        $items = $this->galleries->listItems($name);
         $canUpload = $user ? $this->auth->can($user, 'upload', $gal) : false;
         echo json_encode(['items' => $items, 'gallery' => ['name' => $name, 'title' => $gal['title'] ?? $name, 'public' => $isPublic, 'canUpload' => $canUpload]]);
     }

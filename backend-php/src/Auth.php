@@ -16,9 +16,19 @@ class Auth
     public function __construct(ConfigLoader $config)
     {
         $this->config = $config;
-        $this->jwtSecret = getenv('JWT_SECRET') ?: 'change-me';
+        $this->jwtSecret = self::secret();
         $this->jwtIssuer = getenv('JWT_ISSUER') ?: 'gallerix';
         $this->jwtExpiresIn = (int)(getenv('JWT_EXPIRES_IN') ?: '86400');
+    }
+
+    public static function secret(): string
+    {
+        $secret = (string)getenv('JWT_SECRET');
+        // php-jwt >= 7 rejects HS256 keys shorter than 256 bit; fail with a clear message instead
+        if (strlen($secret) < 32 || $secret === 'change-me') {
+            throw new \RuntimeException('JWT_SECRET must be set to a random value of at least 32 bytes (e.g. `openssl rand -base64 48`)');
+        }
+        return $secret;
     }
 
     public function login(string $username, string $password): ?array
@@ -28,11 +38,12 @@ class Auth
             if (strcasecmp($user['username'] ?? '', $username) === 0) {
                 $hash = $user['passwordHash'] ?? '';
                 if (password_verify($password, $hash)) {
+                    $username = (string)$user['username'];
                     $roles = $user['roles'] ?? [];
                     $now = time();
                     $payload = [
                         'sub' => $username,
-                        'roles' => $roles,
+                        'pv' => self::passwordVersion($hash),
                         'iat' => $now,
                         'nbf' => $now,
                         'exp' => $now + $this->jwtExpiresIn,
@@ -54,19 +65,13 @@ class Auth
             echo json_encode(['error' => 'Missing token']);
             exit;
         }
-        $token = substr($auth, 7);
-        try {
-            $decoded = JWT::decode($token, new Key($this->jwtSecret, 'HS256'));
-            return [
-                'username' => $decoded->sub ?? 'unknown',
-                'roles' => $decoded->roles ?? [],
-                'token' => $token,
-            ];
-        } catch (\Throwable $e) {
+        $user = $this->userFromToken(substr($auth, 7));
+        if (!$user) {
             http_response_code(401);
             echo json_encode(['error' => 'Invalid token']);
             exit;
         }
+        return $user;
     }
 
     /**
@@ -79,17 +84,39 @@ class Auth
         if (!str_starts_with($auth, 'Bearer ')) {
             return null;
         }
-        $token = substr($auth, 7);
+        return $this->userFromToken(substr($auth, 7));
+    }
+
+    /**
+     * Validates the JWT and resolves the user against the current users.json, so deleted users,
+     * changed roles and changed passwords take effect immediately instead of at token expiry.
+     */
+    private function userFromToken(string $token): ?array
+    {
         try {
             $decoded = JWT::decode($token, new Key($this->jwtSecret, 'HS256'));
-            return [
-                'username' => $decoded->sub ?? 'unknown',
-                'roles' => $decoded->roles ?? [],
-                'token' => $token,
-            ];
         } catch (\Throwable $e) {
             return null;
         }
+        if (($decoded->iss ?? null) !== $this->jwtIssuer) return null;
+        $sub = (string)($decoded->sub ?? '');
+        foreach ($this->config->users() as $u) {
+            if (strcasecmp($u['username'] ?? '', $sub) !== 0) continue;
+            if (!hash_equals(self::passwordVersion((string)($u['passwordHash'] ?? '')), (string)($decoded->pv ?? ''))) {
+                return null;
+            }
+            return [
+                'username' => (string)$u['username'],
+                'roles' => array_values($u['roles'] ?? []),
+            ];
+        }
+        return null;
+    }
+
+    /** Short fingerprint of the password hash; changing the password invalidates existing tokens. */
+    private static function passwordVersion(string $hash): string
+    {
+        return substr(hash_hmac('sha256', $hash, self::secret()), 0, 16);
     }
 
     public function hasRole(array $user, string $role): bool

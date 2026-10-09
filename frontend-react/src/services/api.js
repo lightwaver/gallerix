@@ -1,4 +1,4 @@
-import { getToken } from './auth.js'
+import { getToken, handleUnauthorized } from './auth.js'
 
 let runtimeConfigPromise
 async function getRuntimeConfig() {
@@ -26,6 +26,7 @@ async function request(path, opts = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   }
   const res = await fetch(url, { ...opts, headers })
+  if (res.status === 401 && token && path !== '/login') handleUnauthorized()
   if (!res.ok) {
     let err
     try { err = await res.json() } catch { err = { error: res.statusText } }
@@ -40,6 +41,8 @@ export const api = {
     request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
 
   me: () => request('/me'),
+
+  logout: () => request('/logout', { method: 'POST' }),
 
   listGalleries: () => request('/galleries'),
 
@@ -75,6 +78,7 @@ export const api = {
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
+        if (xhr.status === 401 && token) handleUnauthorized()
         if (xhr.status >= 200 && xhr.status < 300) {
           try { resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {}) } catch { resolve({}) }
         } else {

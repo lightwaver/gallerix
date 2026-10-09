@@ -14,6 +14,7 @@ use Gallerix\ConfigLoader;
 use Gallerix\Auth;
 use Gallerix\GalleryService;
 use Gallerix\MediaPolicy;
+use Gallerix\MediaSigner;
 use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
 
 // Load env
@@ -49,21 +50,13 @@ try {
     $auth = new Auth($config);
     $gals = new GalleryService($azure, $config);
 
-    // Token via cookie/header/query
-    $token = null;
-    if (isset($_COOKIE['gallerix_token'])) {
-        $token = 'Bearer ' . $_COOKIE['gallerix_token'];
-    } elseif (!empty($_GET['t'])) {
-        $token = 'Bearer ' . (string)$_GET['t'];
-    } elseif (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
-        $token = (string)$_SERVER['HTTP_AUTHORIZATION'];
-    }
-    if ($token) { $_SERVER['HTTP_AUTHORIZATION'] = $token; }
-
     $gal = $gals->getGalleryByName($gallery);
     if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
+    // Access: public gallery, a valid signed URL (issued by the API after its permission check),
+    // or an Authorization header for API clients. Session tokens in cookies/query are no longer accepted.
     $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
-    if (!$isPublic) {
+    $signed = (new MediaSigner())->verify($gallery, $file, (string)($_GET['e'] ?? ''), (string)($_GET['sig'] ?? ''));
+    if (!$isPublic && !$signed) {
         $user = $auth->requireAuth();
         if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
     }

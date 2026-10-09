@@ -12,12 +12,14 @@ class GalleryService
     private AzureClient $azure;
     private ConfigLoader $config;
     private string $dataContainer;
+    private MediaSigner $signer;
 
     public function __construct(AzureClient $azure, ConfigLoader $config)
     {
         $this->azure = $azure;
         $this->config = $config;
         $this->dataContainer = getenv('AZURE_CONTAINER_DATA') ?: 'data';
+        $this->signer = new MediaSigner();
     }
 
     public function listGalleriesForUser(array $user): array
@@ -31,7 +33,7 @@ class GalleryService
                     'name' => $gal['name'],
                     'title' => $gal['title'] ?? $gal['name'],
                     'description' => $gal['description'] ?? '',
-                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'], $user['token'] ?? null)
+                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
                 ];
             }
         }
@@ -65,7 +67,7 @@ class GalleryService
         return null;
     }
 
-    public function listItems(string $galleryName, ?string $token = null): array
+    public function listItems(string $galleryName): array
     {
         $client = $this->azure->getBlobClient();
         $prefix = rtrim($galleryName, '/') . '/';
@@ -73,21 +75,14 @@ class GalleryService
         $opts->setPrefix($prefix);
         $items = [];
         $result = $client->listBlobs($this->dataContainer, $opts);
-    $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
-    foreach ($result->getBlobs() as $blob) {
+        foreach ($result->getBlobs() as $blob) {
             $name = $blob->getName();
             if (str_ends_with($name, '/')) continue; // skip folders
             $file = substr($name, strlen($prefix));
             if ($file === '' || str_contains($file, '/')) continue; // only direct children
-            // Serve via auth-protected proxy endpoint image.php
-            $path = '/image.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
-            if ($token) {
-                $path .= '&t=' . rawurlencode($token);
-            }
-            $url = $publicBase ? ($publicBase . $path) : $path;
-            $thumbPath = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
-            if ($token) { $thumbPath .= '&t=' . rawurlencode($token); }
-            $thumbUrl = $publicBase ? ($publicBase . $thumbPath) : $thumbPath;
+            // Serve via proxy endpoints using short-lived signed URLs (no session token in URLs)
+            $url = $this->signer->url('image.php', $galleryName, $file);
+            $thumbUrl = $this->signer->url('thumb.php', $galleryName, $file);
             $mime = $blob->getProperties()->getContentType();
             $ctype = (string)$mime;
             $type = (str_starts_with($ctype, 'video')) ? 'video' : ((stripos($ctype, 'application/pdf') === 0) ? 'pdf' : 'image');
@@ -214,7 +209,7 @@ class GalleryService
     /**
      * Returns a preview-sized cover URL for the first image in the gallery, or null if none.
      */
-    private function buildGalleryCoverUrl(string $galleryName, ?string $authToken = null): ?string
+    private function buildGalleryCoverUrl(string $galleryName): ?string
     {
         try {
             $client = $this->azure->getBlobClient();
@@ -232,10 +227,7 @@ class GalleryService
                     if ($file === '' || str_contains($file, '/')) continue; // only direct children
                     $mime = (string)$blob->getProperties()->getContentType();
                     if (str_starts_with($mime, 'image')) {
-                        $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
-                        $path = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file) . '&s=preview';
-                        if (!empty($authToken)) { $path .= '&t=' . rawurlencode($authToken); }
-                        return $publicBase ? ($publicBase . $path) : $path;
+                        return $this->signer->url('thumb.php', $galleryName, $file, ['s' => 'preview']);
                     }
                 }
                 $cont = $result->getContinuationToken();
