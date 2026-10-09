@@ -118,30 +118,4 @@ class Auth
     {
         return substr(hash_hmac('sha256', $hash, self::secret()), 0, 16);
     }
-
-    public function hasRole(array $user, string $role): bool
-    {
-        return in_array($role, $user['roles'] ?? [], true);
-    }
-
-    public function can(array $user, string $permission, ?array $gallery = null): bool
-    {
-        $rolesDef = $this->config->roles();
-        $userRoles = $user['roles'] ?? [];
-        $neededRoles = [];
-        if ($permission === 'admin') {
-            $neededRoles = ['admin'];
-        } elseif ($gallery) {
-            $galRoles = $gallery['roles'] ?? [];
-            $neededRoles = $galRoles[$permission] ?? [];
-        } else {
-            // global view list
-            $neededRoles = $rolesDef['global'][$permission] ?? [];
-        }
-        if (empty($neededRoles)) return false;
-        foreach ($userRoles as $r) {
-            if (in_array($r, $neededRoles, true)) return true;
-        }
-        return false;
-    }
 }

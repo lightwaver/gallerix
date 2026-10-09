@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import { adminApi } from '../services/adminApi.js'
-import { Card, Container, Tabs, Input, TextArea, Button } from '../components/ui.jsx'
+import { Card, Container, Tabs, Input, TextArea, Button, Checkbox } from '../components/ui.jsx'
+
+// Global permissions that are evaluated by the backend (other keys in roles.json are kept but have no effect)
+const GLOBAL_PERMS = {
+  admin: 'System admins: access to Settings and full access to every gallery. The role "admin" always counts.',
+  createGallery: 'May create new galleries (and becomes manager of the galleries they create).',
+}
+const GALLERY_PERMS = {
+  view: 'View the gallery',
+  upload: 'Upload files (includes view)',
+  admin: 'Manage: edit gallery, roles and delete files (includes upload)',
+}
+const EMPTY_GALLERY = { name: '', title: '', description: '', public: false, roles: { view: [], upload: [], admin: [] } }
 
 function HeaderTabs({ tab, setTab }) { return <Tabs tabs={['Galleries', 'Users','Functions & Roles']} current={tab} onChange={setTab} /> }
 
@@ -64,7 +76,7 @@ function UsersTab() {
 }
 
 function RolesTab() {
-  const [roles, setRoles] = useState({ global: { view: ['admin','member'], upload: ['admin'], admin: ['admin'] } })
+  const [roles, setRoles] = useState({ global: { admin: ['admin'], createGallery: [] } })
   const [error, setError] = useState('')
   const [pendingAdds, setPendingAdds] = useState({}) // permission -> input value
 
@@ -101,7 +113,7 @@ function RolesTab() {
     setPendingAdds(s => ({ ...s, [perm]: '' }))
   }
 
-  const perms = Object.keys(roles.global || {})
+  const perms = Object.keys(GLOBAL_PERMS)
 
   const Chip = ({ label, onRemove }) => (
     <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px', border:'1px solid var(--ppo-border)', borderRadius:999, background:'var(--ppo-surface-2)', fontSize:12 }}>
@@ -125,8 +137,9 @@ function RolesTab() {
                 <strong>{perm}</strong>
               </div>
             </div>
+            <div style={{ fontSize:12, color:'var(--ppo-muted)', marginBottom:8 }}>{GLOBAL_PERMS[perm]}</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-              {(roles.global[perm] || []).map(r => (
+              {(roles.global?.[perm] || []).map(r => (
                 <Chip key={r} label={r} onRemove={() => removeRole(perm, r)} />
               ))}
             </div>
@@ -141,7 +154,7 @@ function RolesTab() {
         <Button icon="save" onClick={save}>Save</Button>
       </div>
       <p style={{ fontSize:12, color:'var(--ppo-muted)' }}>
-        Tip: Permissions are defined under roles.global. You can also edit raw JSON in the config if you need advanced changes.
+        Entries are role names, or <code>@username</code> to grant a single user. Per-gallery permissions are set on each gallery.
       </p>
     </div>
   )
@@ -149,14 +162,14 @@ function RolesTab() {
 
 function GalleriesTab() {
   const [gals, setGals] = useState([])
-  const [form, setForm] = useState({ name: '', title: '', description: '', roles: { view:['admin','member'], upload:['admin'], admin:['admin'] } })
+  const [form, setForm] = useState(EMPTY_GALLERY)
   const [error, setError] = useState('')
   const [pendingAdds, setPendingAdds] = useState({ view: '', upload: '', admin: '' })
   const load = () => { adminApi.listGalleries().then(r=> setGals(r.galleries||[])).catch(e=> setError(e.message)) }
   useEffect(() => { load() }, [])
-  const submit = async (e) => { e.preventDefault(); setError(''); try { await adminApi.upsertGallery(form); setForm({ name:'', title:'', description:'', roles: { view:['admin','member'], upload:['admin'], admin:['admin'] } }); load() } catch(e){ setError(e.message) } }
+  const submit = async (e) => { e.preventDefault(); setError(''); try { await adminApi.upsertGallery(form); setForm(EMPTY_GALLERY); load() } catch(e){ setError(e.message) } }
   const remove = async (g) => { if (confirm(`Delete ${g.name}?`)) { await adminApi.deleteGallery(g.name); load() } }
-  const edit = (g) => { setForm({ name:g.name || '', title:g.title || '', description:g.description || '', roles: g.roles || { view:[], upload:[], admin:[] } }) }
+  const edit = (g) => { setForm({ name:g.name || '', title:g.title || '', description:g.description || '', public: !!g.public, roles: g.roles || EMPTY_GALLERY.roles }) }
 
   const removeRole = (perm, role) => {
     setForm(prev => {
@@ -196,7 +209,7 @@ function GalleriesTab() {
           <div key={g.name} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--ppo-border)' }}>
             <div>
               <div style={{ fontWeight:600 }}>{g.name}</div>
-              <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.title}</div>
+              <div style={{ fontSize:12, color:'var(--ppo-muted)' }}>{g.title}{g.public ? ' · public' : ''}</div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="outline" icon="edit" onClick={() => edit(g)}>Edit</Button>
@@ -209,13 +222,15 @@ function GalleriesTab() {
         <Input label="Name" placeholder="e.g. summer-camp-2025" value={form.name} onChange={e=>setForm(f=>({...f, name:e.target.value}))} />
         <Input label="Title" placeholder="Summer Camp 2025" value={form.title} onChange={e=>setForm(f=>({...f, title:e.target.value}))} />
         <TextArea label="Description" placeholder="Description" value={form.description} onChange={e=>setForm(f=>({...f, description:e.target.value}))} />
+        <Checkbox label="Public" hint="Viewable without login and listed on the login page." checked={!!form.public} onChange={e=>setForm(f=>({...f, public:e.target.checked}))} />
         <div style={{ display:'grid', gap:12 }}>
-          {['view','upload','admin'].map(perm => (
+          {Object.keys(GALLERY_PERMS).map(perm => (
             <Card key={perm}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <span className="material-symbols-outlined" style={{ color:'var(--ppo-primary)' }}>tune</span>
                   <strong>{perm}</strong>
+                  <span style={{ fontSize:12, color:'var(--ppo-muted)' }}>{GALLERY_PERMS[perm]}</span>
                 </div>
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>

@@ -35,7 +35,7 @@ npm run dev
 - Serve built frontend statically; map PHP API under `/api`. Set `PUBLIC_BASE_URL=/api` in backend env.
 
 ## Features
-- Public galleries: Galleries with `roles.view` containing `public` are visible without login and accessible from the Login screen.
+- Public galleries: Galleries with `"public": true` are visible without login and listed on the Login screen (the legacy form — `public` inside `roles.view` — is still recognized and converted on the next save). Logged-in users see them in their gallery list as well.
 - Media proxy endpoints:
   - `public/image.php` streams original files with auth/role checks. Public galleries allow access without a token; for private ones the API hands out short-lived signed URLs (`e`/`sig` parameters, bound to gallery + file) after its permission check. API clients may alternatively send an `Authorization: Bearer` header. Session tokens are never placed in URLs or cookies.
   - `public/thumb.php` generates and caches thumbnails and preview images on-demand using GD. Non-images return a tiny PNG placeholder.
@@ -48,12 +48,17 @@ npm run dev
   - Preloads adjacent preview images.
   - Downloads always link to the original file.
   - PDFs render inline via iframe with an icon in the grid.
-- Roles & permissions:
-  - Global `createGallery` permission controls who can create galleries.
-  - Per-gallery `view`/`upload`/`admin` roles drive server-side checks; public galleries still compute `canUpload` if a logged-in user is present.
+- Roles & permissions (all checks live in `backend-php/src/Authorizer.php`, details in `backend-php/CONFIG_SCHEMAS.md`):
+  - System admins (roles in `roles.json` → `global.admin`, plus always the role `admin`) access Settings and have full access to every gallery.
+  - Global `createGallery` controls who can create galleries. The creator's roles may view/upload, and the creator (`@username`) manages the new gallery.
+  - Per gallery, `view` / `upload` / `admin` are hierarchical: upload includes view, admin (= manage) includes upload.
+  - Gallery managers can edit title, description, visibility and roles of their gallery and delete files — directly in the gallery view. Changes that would remove their own manage access are rejected.
+  - Role lists may contain role names or `@username` to grant a single user.
   - Sessions: roles are re-read from `users.json` on every request, so deleting a user, changing roles or changing the password takes effect immediately (a password change invalidates existing sessions).
   - Admin Settings UI for users/roles/galleries. User passwords can be entered in plaintext in the UI; backend hashes them.
-- Gallery cover image: The first image’s preview is used as the title image in lists; includes a token for private galleries across API calls.
+- Uploads: only images, videos and PDFs are accepted; the type is detected from the file contents (not the browser-supplied type). Filenames are sanitized and existing files are never overwritten — duplicates get a ` (1)` suffix. Media is served with `nosniff` and a sandboxing CSP.
+- Gallery names: new galleries need a slug name (`a-z`, `0-9`, `-`, `_`, max 64 chars); it is derived from the title when omitted. Creating a gallery whose name already exists fails with 409.
+- Gallery cover image: The first image’s preview is used as the title image in lists (via a signed URL for private galleries).
 - Storage cleanup: Deleting a gallery via Admin also removes its blobs from both `data` and `thumbs` containers.
 - Typography & UI:
   - Kumbh Sans as default font; headings use Extra Bold.
@@ -67,8 +72,8 @@ Create containers in your storage account:
 
 Upload the following JSON files to `config` (see `backend-php/CONFIG_SCHEMAS.md` for details):
 - `users.json` — array of users with `username`, `passwordHash` (bcrypt), and `roles`
-- `roles.json` — global role configuration for permissions (e.g., `createGallery`)
-- `galleries.json` — list of galleries with per-gallery `roles.view/upload/admin`
+- `roles.json` — global permissions (`admin`, `createGallery`)
+- `galleries.json` — list of galleries with `public` flag and per-gallery `roles.view/upload/admin`
 
 ## Backend (PHP)
 Environment: copy `backend-php/.env.example` to `backend-php/.env` and set either `AZURE_STORAGE_CONNECTION_STRING` or the account/key/endpoints.
@@ -96,20 +101,23 @@ Key env vars:
 Auth & data:
 - POST `/api/login` → `{ token, user }`
 - POST `/api/logout` → `{ ok }` (clears the legacy media cookie of older versions)
-- GET `/api/me` → `{ user }` (requires Authorization)
-- GET `/api/galleries` → `{ galleries: [{ name, title, description, coverUrl }] }` (requires Authorization)
+- GET `/api/me` → `{ user: { username, roles, isAdmin, canCreateGallery } }` (requires Authorization; login returns the same `user` shape)
+- GET `/api/galleries` → `{ galleries: [{ name, title, description, public, coverUrl }], canCreate }` (requires Authorization)
+- POST `/api/galleries` → `{ gallery }` — body `{ title?, name?, description?, public?, roles?: { view?, upload?, admin? } }` (requires `createGallery`; 409 if the name exists)
 - GET `/api/public-galleries` → `{ galleries: [...] }` (no auth)
-- GET `/api/galleries/:name/items` → `{ gallery: { title, public, canUpload }, items: [...] }` (public allowed, optional auth for permissions)
-- POST `/api/galleries/:name/upload` — multipart form with `file` (requires upload role)
+- GET `/api/galleries/:name/items` → `{ gallery: { name, title, description, public, canView, canUpload, canManage, roles? }, items: [...] }` (public allowed, optional auth for permissions; `roles` only for managers)
+- PATCH `/api/galleries/:name` → `{ gallery }` — body with any of `title`, `description`, `public`, `roles` (requires gallery manage)
+- DELETE `/api/galleries/:name/items/:file` → `{ ok }` — deletes the file and its cached thumbnails (requires gallery manage)
+- POST `/api/galleries/:name/upload` — multipart form with `file` (requires upload)
 
-Admin (admin role):
+Admin (system admin):
 - `/api/admin/users` (GET/POST/DELETE)
 - `/api/admin/roles` (GET/PUT)
 - `/api/admin/galleries` (GET/POST/PUT/DELETE)
 
 Media proxy:
 - `GET /image.php?g=<gallery>&f=<file>&e=<expiry>&sig=<signature>` — original download/stream with role checks
-- `GET /thumb.php?g=<gallery>&f=<file>&s=thumb|preview[&t=<token>]` — generates/serves cached images
+- `GET /thumb.php?g=<gallery>&f=<file>&s=thumb|preview&e=<expiry>&sig=<signature>` — generates/serves cached images
 
 ## Frontend (React / Vite)
 

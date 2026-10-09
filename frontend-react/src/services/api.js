@@ -52,6 +52,13 @@ export const api = {
   listItems: (name) =>
     request(`/galleries/${encodeURIComponent(name)}/items`),
 
+  // Gallery managers: title, description, public, roles ({ view, upload, admin })
+  updateGallery: (name, changes) =>
+    request(`/galleries/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+
+  deleteItem: (name, file) =>
+    request(`/galleries/${encodeURIComponent(name)}/items/${encodeURIComponent(file)}`, { method: 'DELETE' }),
+
   // Upload with optional progress callback (onProgress receives percent 0-100)
   upload: (name, file, onProgress) => new Promise(async (resolve, reject) => {
     const token = getToken()

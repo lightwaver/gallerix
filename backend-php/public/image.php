@@ -24,6 +24,7 @@ use Dotenv\Dotenv;
 use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
+use Gallerix\Authorizer;
 use Gallerix\GalleryService;
 use Gallerix\MediaPolicy;
 use Gallerix\MediaSigner;
@@ -51,11 +52,11 @@ try {
     if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
     // Access: public gallery, a valid signed URL (issued by the API after its permission check),
     // or an Authorization header for API clients. Session tokens in cookies/query are no longer accepted.
-    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
+    $authz = new Authorizer($config);
     $signed = (new MediaSigner())->verify($gallery, $file, (string)($_GET['e'] ?? ''), (string)($_GET['sig'] ?? ''));
-    if (!$isPublic && !$signed) {
+    if (!$signed && !Authorizer::isPublic($gal)) {
         $user = $auth->requireAuth();
-        if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
+        if (!$authz->canGallery($user, Authorizer::VIEW, $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
     }
 
     // Fetch blob and stream

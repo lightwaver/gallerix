@@ -70,25 +70,68 @@ class AdminService
     public function setRoles(array $roles): array { $this->config->saveRoles($roles); return $roles; }
 
     // Galleries
-    public function listGalleries(): array { return $this->config->galleries(); }
+    public function listGalleries(): array {
+        return array_map([Authorizer::class, 'normalizeGallery'], $this->config->galleries());
+    }
+
+    /** Creates a gallery or updates an existing one (system admin). */
     public function upsertGallery(array $gallery): array {
         $name = (string)($gallery['name'] ?? '');
         if (!MediaPolicy::isSafeSegment($name)) { throw new \InvalidArgumentException('Invalid gallery name'); }
+        $updated = $this->updateGallery($name, $gallery);
+        if ($updated !== null) return $updated;
+        if (!MediaPolicy::isValidNewGalleryName($name)) {
+            throw new \InvalidArgumentException('Invalid gallery name (allowed: a-z, 0-9, "-", "_"; max 64 chars)');
+        }
+        $new = Authorizer::normalizeGallery(['name' => $name, 'title' => $name, 'description' => ''] + self::galleryChanges($gallery));
         $gals = $this->config->galleries();
-        $found = false;
-        foreach ($gals as &$g) {
-            if (($g['name'] ?? '') === $name) { $g = array_merge($g, $gallery); $found = true; break; }
-        }
-        unset($g);
-        if (!$found) {
-            if (!MediaPolicy::isValidNewGalleryName($name)) {
-                throw new \InvalidArgumentException('Invalid gallery name (allowed: a-z, 0-9, "-", "_"; max 64 chars)');
-            }
-            $gals[] = $gallery;
-        }
+        $gals[] = $new;
         $this->config->saveGalleries($gals);
-        return $gallery;
+        return $new;
     }
+
+    /**
+     * Applies title/description/public/roles changes to an existing gallery; other stored keys are kept.
+     * Returns the updated gallery, or null if it does not exist.
+     */
+    public function updateGallery(string $name, array $input): ?array {
+        $gals = $this->config->galleries();
+        foreach ($gals as $i => $g) {
+            if (($g['name'] ?? '') !== $name) continue;
+            $gals[$i] = self::applyGalleryChanges($g, $input);
+            $this->config->saveGalleries($gals);
+            return $gals[$i];
+        }
+        return null;
+    }
+
+    /** Returns the gallery with the (whitelisted) changes applied, without saving. */
+    public static function applyGalleryChanges(array $gallery, array $input): array {
+        $current = Authorizer::normalizeGallery($gallery);
+        $changes = self::galleryChanges($input);
+        if (isset($changes['roles'])) $changes['roles'] = array_merge($current['roles'], $changes['roles']);
+        return Authorizer::normalizeGallery(array_merge($current, $changes));
+    }
+
+    /** Whitelists and sanitizes the editable gallery fields of a request body. */
+    public static function galleryChanges(array $input): array {
+        $changes = [];
+        if (array_key_exists('title', $input)) {
+            $title = trim((string)$input['title']);
+            if ($title !== '') $changes['title'] = mb_substr($title, 0, 200);
+        }
+        if (array_key_exists('description', $input)) $changes['description'] = mb_substr((string)$input['description'], 0, 2000);
+        if (array_key_exists('public', $input)) $changes['public'] = filter_var($input['public'], FILTER_VALIDATE_BOOLEAN);
+        if (is_array($input['roles'] ?? null)) {
+            foreach ([Authorizer::VIEW, Authorizer::UPLOAD, Authorizer::MANAGE] as $level) {
+                if (array_key_exists($level, $input['roles'])) {
+                    $changes['roles'][$level] = Authorizer::cleanRoleList($input['roles'][$level]);
+                }
+            }
+        }
+        return $changes;
+    }
+
     public function deleteGallery(string $name): void {
         $gals = array_values(array_filter($this->config->galleries(), fn($g) => ($g['name'] ?? '') !== $name));
         $this->config->saveGalleries($gals);

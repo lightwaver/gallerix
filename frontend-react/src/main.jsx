@@ -34,7 +34,7 @@ function AppLayout({ children }) {
               <span className="material-symbols-outlined" style={{ fontSize:18 }}>collections</span>
               <span className="mobileHidden">Galleries</span>
             </NavLink>
-            {user?.roles?.includes('admin') && (
+            {user?.isAdmin && (
               <NavLink to="/settings" className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
                 <span className="material-symbols-outlined" style={{ fontSize:18 }}>settings</span>
                 <span className="mobileHidden">Settings</span>

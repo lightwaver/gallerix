@@ -63,10 +63,8 @@ class MediaPolicy
      */
     public static function detectType(string $path, string $filename): ?string
     {
-        if (function_exists('finfo_open')) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $type = $finfo ? finfo_file($finfo, $path) : false;
-            if ($finfo) finfo_close($finfo);
+        if (class_exists(\finfo::class)) {
+            $type = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
             if (is_string($type) && $type !== '' && $type !== 'application/octet-stream') {
                 return strtolower($type);
             }

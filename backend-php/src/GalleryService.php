@@ -22,38 +22,23 @@ class GalleryService
         $this->signer = new MediaSigner();
     }
 
-    public function listGalleriesForUser(array $user): array
+    /**
+     * Gallery summaries for every gallery accepted by $filter (receives the normalized gallery).
+     * @param callable(array): bool $filter
+     */
+    public function listGalleries(callable $filter): array
     {
-        $galleries = $this->config->galleries();
         $result = [];
-        foreach ($galleries as $gal) {
-            $roles = $gal['roles']['view'] ?? [];
-            if ($this->userHasAnyRole($user, $roles)) {
-                $result[] = [
-                    'name' => $gal['name'],
-                    'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? '',
-                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
-                ];
-            }
-        }
-        return $result;
-    }
-
-    public function listPublicGalleries(): array
-    {
-        $galleries = $this->config->galleries();
-        $result = [];
-        foreach ($galleries as $gal) {
-            $roles = $gal['roles']['view'] ?? [];
-            if (in_array('public', $roles, true)) {
-                $result[] = [
-                    'name' => $gal['name'],
-                    'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? '',
-                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
-                ];
-            }
+        foreach ($this->config->galleries() as $gal) {
+            $gal = Authorizer::normalizeGallery($gal);
+            if (!$filter($gal)) continue;
+            $result[] = [
+                'name' => $gal['name'],
+                'title' => $gal['title'] ?? $gal['name'],
+                'description' => $gal['description'] ?? '',
+                'public' => $gal['public'],
+                'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
+            ];
         }
         return $result;
     }
@@ -62,7 +47,7 @@ class GalleryService
     {
         $galleries = $this->config->galleries();
         foreach ($galleries as $gal) {
-            if (($gal['name'] ?? '') === $name) return $gal;
+            if (($gal['name'] ?? '') === $name) return Authorizer::normalizeGallery($gal);
         }
         return null;
     }
@@ -153,6 +138,36 @@ class GalleryService
     }
 
     /**
+     * Deletes one file and its cached thumbnail/preview. Returns false if the file does not exist.
+     */
+    public function deleteItem(string $galleryName, string $file): bool
+    {
+        $client = $this->azure->getBlobClient();
+        $blobName = rtrim($galleryName, '/') . '/' . $file;
+        try {
+            $client->deleteBlob($this->dataContainer, $blobName);
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 404) return false;
+            throw $e;
+        }
+        $thumbsContainer = getenv('AZURE_CONTAINER_THUMBS') ?: 'thumbs';
+        foreach ([$blobName, self::previewBlobName($blobName), 'preview/' . $blobName] as $thumb) {
+            try { $client->deleteBlob($thumbsContainer, $thumb); }
+            catch (ServiceException $e) { if ($e->getCode() !== 404) error_log('[Gallerix] delete thumb failed: ' . $thumb . ' - ' . $e->getMessage()); }
+        }
+        return true;
+    }
+
+    /** Name of the cached preview-size image in the thumbs container: "dir/file_preview.ext". */
+    public static function previewBlobName(string $blobName): string
+    {
+        $dot = strrpos($blobName, '.');
+        $slash = strrpos($blobName, '/');
+        if ($dot === false || ($slash !== false && $dot < $slash)) return $blobName . '_preview';
+        return substr($blobName, 0, $dot) . '_preview' . substr($blobName, $dot);
+    }
+
+    /**
      * Delete all blobs for a gallery from data and thumbs containers.
      */
     public function deleteGalleryContents(string $galleryName): void
@@ -195,15 +210,6 @@ class GalleryService
             UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the file upload',
             default => 'Unknown upload error',
         };
-    }
-
-    private function userHasAnyRole(array $user, array $roles): bool
-    {
-        $userRoles = $user['roles'] ?? [];
-        foreach ($userRoles as $r) {
-            if (in_array($r, $roles, true)) return true;
-        }
-        return false;
     }
 
     /**

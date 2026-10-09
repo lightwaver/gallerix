@@ -12,6 +12,7 @@ use Dotenv\Dotenv;
 use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
+use Gallerix\Authorizer;
 use Gallerix\GalleryService;
 use Gallerix\MediaPolicy;
 use Gallerix\MediaSigner;
@@ -54,11 +55,11 @@ try {
     if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
     // Access: public gallery, a valid signed URL (issued by the API after its permission check),
     // or an Authorization header for API clients. Session tokens in cookies/query are no longer accepted.
-    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
+    $authz = new Authorizer($config);
     $signed = (new MediaSigner())->verify($gallery, $file, (string)($_GET['e'] ?? ''), (string)($_GET['sig'] ?? ''));
-    if (!$isPublic && !$signed) {
+    if (!$signed && !Authorizer::isPublic($gal)) {
         $user = $auth->requireAuth();
-        if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
+        if (!$authz->canGallery($user, Authorizer::VIEW, $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
     }
 
     $client = $azure->getBlobClient();
@@ -68,14 +69,7 @@ try {
     // Size selector: default 'thumb', optional 'preview' uses PREVIEW_MAX_SIZE and a different cache name
     $sizeParam = isset($_GET['s']) ? (string)$_GET['s'] : 'thumb';
     $isPreview = ($sizeParam === 'preview');
-    // build suffix name for preview: file_preview.ext
-    $suffixName = $blobName;
-    if ($isPreview) {
-        $dot = strrpos($blobName, '.');
-        if ($dot === false) { $suffixName = $blobName . '_preview'; }
-        else { $suffixName = substr($blobName, 0, $dot) . '_preview' . substr($blobName, $dot); }
-    }
-    $thumbName = $isPreview ? $suffixName : $blobName;
+    $thumbName = $isPreview ? GalleryService::previewBlobName($blobName) : $blobName;
 
     // Try to serve existing thumb (new naming). If not found, try legacy preview/ prefix and copy to new name.
     try {
