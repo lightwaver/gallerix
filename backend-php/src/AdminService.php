@@ -8,66 +8,86 @@ class AdminService
     public function __construct(private ConfigLoader $config) {}
 
     // Users
-    public function listUsers(): array { return $this->config->users(); }
-    public function upsertUser(array $user): array {
-        $users = $this->config->users();
-        $incoming = $user;
-        $username = (string)($incoming['username'] ?? '');
+
+    /** Users without password hashes; those never leave the server. */
+    public function listUsers(): array {
+        return array_map(fn($u) => self::publicUser($u), $this->config->users());
+    }
+
+    /**
+     * Creates or updates a user. Only username, roles and password are accepted; a plaintext
+     * password is hashed here, a pre-computed passwordHash must be a valid password_hash() result.
+     */
+    public function upsertUser(array $input): array {
+        $username = trim((string)($input['username'] ?? ''));
         if ($username === '') { throw new \InvalidArgumentException('username is required'); }
 
-        // Normalize roles
-        if (isset($incoming['roles'])) {
-            if (is_string($incoming['roles'])) {
-                $incoming['roles'] = array_values(array_filter(array_map('trim', explode(',', $incoming['roles'])), fn($r) => $r !== ''));
-            } elseif (!is_array($incoming['roles'])) {
-                $incoming['roles'] = [];
+        $roles = null;
+        if (array_key_exists('roles', $input)) {
+            $roles = Authorizer::cleanRoleList($input['roles']);
+            foreach ($roles as $r) {
+                if (str_starts_with($r, '@')) throw new \InvalidArgumentException('Role names must not start with "@" (reserved for @username)');
             }
         }
 
-        // Handle password: hash if plaintext provided; do not store plaintext
-        $hasPlain = isset($incoming['password']) && trim((string)$incoming['password']) !== '';
-        $hasHash = isset($incoming['passwordHash']) && trim((string)$incoming['passwordHash']) !== '';
         $newHash = null;
-        if ($hasPlain) { $newHash = password_hash((string)$incoming['password'], PASSWORD_DEFAULT); }
-        elseif ($hasHash) { $newHash = (string)$incoming['passwordHash']; }
-
-        // Update existing or append new
-        $found = false;
-        foreach ($users as &$u) {
-            if (strcasecmp($u['username'] ?? '', $username) === 0) {
-                $found = true;
-                // Merge updatable fields (roles and others)
-                foreach ($incoming as $k => $v) {
-                    if ($k === 'password' || $k === 'passwordHash' || $k === 'username') continue;
-                    $u[$k] = $v;
-                }
-                // Password: only update if provided
-                if ($newHash !== null) { $u['passwordHash'] = $newHash; }
-                break;
-            }
-        }
-        unset($u); // break reference
-
-        if (!$found) {
-            $record = ['username' => $username, 'roles' => $incoming['roles'] ?? []];
-            if ($newHash !== null) { $record['passwordHash'] = $newHash; }
-            $users[] = $record;
+        $password = (string)($input['password'] ?? '');
+        if ($password !== '') {
+            if (strlen($password) < 8) throw new \InvalidArgumentException('Password must be at least 8 characters');
+            $newHash = password_hash($password, PASSWORD_DEFAULT);
+        } elseif (trim((string)($input['passwordHash'] ?? '')) !== '') {
+            $newHash = trim((string)$input['passwordHash']);
+            if (password_get_info($newHash)['algoName'] === 'unknown') throw new \InvalidArgumentException('passwordHash is not a valid password hash');
         }
 
+        $users = $this->config->users();
+        foreach ($users as $i => $u) {
+            if (strcasecmp($u['username'] ?? '', $username) !== 0) continue;
+            if ($roles !== null) $users[$i]['roles'] = $roles;
+            if ($newHash !== null) $users[$i]['passwordHash'] = $newHash;
+            $this->config->saveUsers($users);
+            return self::publicUser($users[$i]);
+        }
+
+        // New user
+        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/', $username)) {
+            throw new \InvalidArgumentException('Invalid username (allowed: letters, digits, ".", "_", "-"; max 64 chars)');
+        }
+        if ($newHash === null) throw new \InvalidArgumentException('A password is required for new users');
+        $record = ['username' => $username, 'roles' => $roles ?? [], 'passwordHash' => $newHash];
+        $users[] = $record;
         $this->config->saveUsers($users);
-        // Return safe user object (omit password)
-        $safe = ['username' => $username, 'roles' => $incoming['roles'] ?? ($found ? null : [])];
-        if ($safe['roles'] === null) { unset($safe['roles']); }
-        return $safe;
+        return self::publicUser($record);
     }
+
     public function deleteUser(string $username): void {
         $users = array_values(array_filter($this->config->users(), fn($u) => strcasecmp($u['username'] ?? '', $username) !== 0));
         $this->config->saveUsers($users);
     }
 
+    private static function publicUser(array $u): array {
+        return [
+            'username' => (string)($u['username'] ?? ''),
+            'roles' => array_values($u['roles'] ?? []),
+            'hasPassword' => !empty($u['passwordHash']),
+        ];
+    }
+
     // Roles
     public function getRoles(): array { return $this->config->roles(); }
-    public function setRoles(array $roles): array { $this->config->saveRoles($roles); return $roles; }
+
+    /** Replaces roles.json; every permission must be a list of role names / @usernames. */
+    public function setRoles(array $roles): array {
+        if (!is_array($roles['global'] ?? null)) throw new \InvalidArgumentException('roles.global must be an object');
+        $global = [];
+        foreach ($roles['global'] as $perm => $list) {
+            if (!is_string($perm) || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/', $perm)) throw new \InvalidArgumentException('Invalid permission name');
+            $global[$perm] = Authorizer::cleanRoleList($list);
+        }
+        $clean = ['global' => $global];
+        $this->config->saveRoles($clean);
+        return $clean;
+    }
 
     // Galleries
     public function listGalleries(): array {

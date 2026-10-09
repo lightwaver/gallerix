@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 // Suppress notices in output, log instead
-error_reporting(E_ALL);
+// Deprecations are excluded: the Azure storage SDK emits dozens per request on PHP 8.4+
+error_reporting(E_ALL & ~E_DEPRECATED);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
@@ -13,6 +14,7 @@ use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
 use Gallerix\Authorizer;
+use Gallerix\Cors;
 use Gallerix\GalleryService;
 use Gallerix\MediaPolicy;
 use Gallerix\MediaSigner;
@@ -22,18 +24,7 @@ use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
 $dotenv = Dotenv::createUnsafeImmutable(__DIR__ . '/..');
 $dotenv->safeLoad();
 
-// Basic CORS for media
-header('Vary: Origin');
-if (isset($_SERVER['HTTP_ORIGIN'])) {
-    header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
-    header('Access-Control-Allow-Credentials: true');
-}
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
-    header('Access-Control-Allow-Headers: Authorization, Content-Type');
-    header('Access-Control-Allow-Methods: GET, OPTIONS');
-    http_response_code(204);
-    exit;
-}
+Cors::apply('GET, OPTIONS');
 
 $gallery = isset($_GET['g']) ? (string)$_GET['g'] : '';
 $file = isset($_GET['f']) ? (string)$_GET['f'] : '';

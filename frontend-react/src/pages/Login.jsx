@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../services/api.js'
+import { api, resolveUrl } from '../services/api.js'
 import { setAuth } from '../services/auth.js'
 import { Container, Card, Input, Button, Grid } from '../components/ui.jsx'
 
@@ -25,11 +25,13 @@ export default function Login() {
 
   useEffect(() => {
     // Load public galleries for quick access without login
-    fetch('/api/public-galleries').then(async r => {
-      if (!r.ok) return
-      const j = await r.json()
-      setPublicGalleries(j.galleries || [])
-    }).catch(()=>{})
+    api.listPublicGalleries().then(async j => {
+      const gals = j.galleries || []
+      for (const g of gals) {
+        if (g.coverUrl) g.coverUrl = await resolveUrl(g.coverUrl)
+      }
+      setPublicGalleries(gals)
+    }).catch(() => {})
   }, [])
 
   return (

@@ -16,7 +16,7 @@ export async function resolveUrl(path) {
   return base + path
 }
 
-async function request(path, opts = {}) {
+export async function request(path, opts = {}) {
   const token = getToken()
   const url = await resolveUrl(path)
   const isForm = opts.body instanceof FormData
@@ -46,6 +46,8 @@ export const api = {
 
   listGalleries: () => request('/galleries'),
 
+  listPublicGalleries: () => request('/public-galleries'),
+
   createGallery: (payload) =>
     request('/galleries', { method: 'POST', body: JSON.stringify(payload) }),
 
@@ -54,7 +56,7 @@ export const api = {
 
   // Gallery managers: title, description, public, roles ({ view, upload, admin })
   updateGallery: (name, changes) =>
-    request(`/galleries/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+    request(`/galleries/${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(changes) }),
 
   deleteItem: (name, file) =>
     request(`/galleries/${encodeURIComponent(name)}/items/${encodeURIComponent(file)}`, { method: 'DELETE' }),

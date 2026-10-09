@@ -60,6 +60,11 @@ npm run dev
 - Gallery names: new galleries need a slug name (`a-z`, `0-9`, `-`, `_`, max 64 chars); it is derived from the title when omitted. Creating a gallery whose name already exists fails with 409.
 - Gallery cover image: The first image’s preview is used as the title image in lists (via a signed URL for private galleries).
 - Storage cleanup: Deleting a gallery via Admin also removes its blobs from both `data` and `thumbs` containers.
+- Security:
+  - Failed logins are throttled per IP + username and per IP (HTTP 429 with `Retry-After`); unknown usernames take as long as wrong passwords.
+  - Config writes are conditional on the blob ETag: if two requests change `users.json`/`roles.json`/`galleries.json` at the same time, the second one gets HTTP 409 instead of silently overwriting the first.
+  - Password hashes are never sent to the browser. New users need a password (min. 8 characters) and a username of letters, digits, `.`, `_`, `-`; admins cannot delete their own account.
+  - 500 responses contain no internal details (see `APP_DEBUG`); errors are logged server-side.
 - Typography & UI:
   - Kumbh Sans as default font; headings use Extra Bold.
   - Top navigation uses button-style tabs with active state highlighting.
@@ -96,6 +101,9 @@ Key env vars:
 - `THUMB_MAX_SIZE` and `PREVIEW_MAX_SIZE` (pixel bounds)
 - `MEDIA_URL_TTL` (seconds; default: 7200) — minimum validity of signed media URLs (rounded up to the full hour)
 - `PUBLIC_BASE_URL` (optional, e.g., `/api` or full origin; used to prefix media URLs)
+- `CORS_ALLOWED_ORIGINS` (optional, comma separated, e.g. `https://gallery.example.com`) — only needed when the frontend runs on a different origin than the API; without it no CORS headers are sent
+- `APP_DEBUG` (optional; `true` adds exception messages to 500 responses — never enable in production)
+- `LOGIN_MAX_ATTEMPTS` (default 5, per IP + username), `LOGIN_MAX_ATTEMPTS_PER_IP` (default 30), `LOGIN_THROTTLE_WINDOW` (seconds, default 900) — failed-login throttling; state is kept in the system temp directory
 
 ### API endpoints
 Auth & data:
@@ -118,6 +126,16 @@ Admin (system admin):
 Media proxy:
 - `GET /image.php?g=<gallery>&f=<file>&e=<expiry>&sig=<signature>` — original download/stream with role checks
 - `GET /thumb.php?g=<gallery>&f=<file>&s=thumb|preview&e=<expiry>&sig=<signature>` — generates/serves cached images
+
+### Reverse proxy
+The frontend uses only `GET`, `POST` and `DELETE` (updates are sent as `POST`), so proxies with method restrictions such as `limit_except GET POST DELETE` keep working. `PUT`/`PATCH` are accepted by the API as well.
+
+### Tests
+End-to-end tests run the real backend against [Azurite](https://github.com/Azure/Azurite) (Azure Storage emulator) and exercise login/throttling, permissions, uploads, signed media URLs, gallery management and concurrent config writes:
+
+```
+backend-php/tests/e2e/run.sh          # requires podman; DOCKER=docker for docker
+```
 
 ## Frontend (React / Vite)
 

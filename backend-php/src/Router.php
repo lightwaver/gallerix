@@ -57,7 +57,8 @@ class Router
             $this->postUpload(rawurldecode($m[1]));
             return;
         }
-        if (preg_match('#^/api/galleries/([^/]+)$#', $path, $m) && $method === 'PATCH') {
+        // POST is accepted as well because some reverse proxy setups only allow GET/POST/DELETE
+        if (preg_match('#^/api/galleries/([^/]+)$#', $path, $m) && ($method === 'PATCH' || $method === 'POST')) {
             $this->patchGallery(rawurldecode($m[1]));
             return;
         }
@@ -87,12 +88,23 @@ class Router
             echo json_encode(['error' => 'Username and password required']);
             return;
         }
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        $throttle = new LoginThrottle();
+        $wait = $throttle->retryAfter($ip, $username);
+        if ($wait > 0) {
+            http_response_code(429);
+            header('Retry-After: ' . $wait);
+            echo json_encode(['error' => sprintf('Too many failed login attempts. Try again in %d minute(s).', (int)ceil($wait / 60))]);
+            return;
+        }
         $res = $this->auth->login($username, $password);
         if (!$res) {
+            $throttle->recordFailure($ip, $username);
             http_response_code(401);
             echo json_encode(['error' => 'Invalid credentials']);
             return;
         }
+        $throttle->reset($ip, $username);
         $res['user'] += $this->authz->userCapabilities($res['user']);
         echo json_encode($res);
     }
@@ -236,11 +248,21 @@ class Router
         if ($path === '/api/admin/users' && $method === 'GET') { echo json_encode(['users' => $this->admin->listUsers()]); return; }
         if ($path === '/api/admin/users' && $method === 'POST') { echo json_encode(['user' => $this->admin->upsertUser($input)]); return; }
         if (preg_match('#^/api/admin/users/([^/]+)$#', $path, $m)) {
-            if ($method === 'DELETE') { $this->admin->deleteUser(rawurldecode($m[1])); echo json_encode(['ok' => true]); return; }
+            if ($method === 'DELETE') {
+                $target = rawurldecode($m[1]);
+                if (strcasecmp($target, $user['username']) === 0) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'You cannot delete your own account']);
+                    return;
+                }
+                $this->admin->deleteUser($target);
+                echo json_encode(['ok' => true]);
+                return;
+            }
         }
         // Roles
         if ($path === '/api/admin/roles' && $method === 'GET') { echo json_encode(['roles' => $this->admin->getRoles()]); return; }
-        if ($path === '/api/admin/roles' && $method === 'PUT') { echo json_encode(['roles' => $this->admin->setRoles($input)]); return; }
+        if ($path === '/api/admin/roles' && ($method === 'PUT' || $method === 'POST')) { echo json_encode(['roles' => $this->admin->setRoles($input)]); return; }
         // Galleries
         if ($path === '/api/admin/galleries' && $method === 'GET') { echo json_encode(['galleries' => $this->admin->listGalleries()]); return; }
         if ($path === '/api/admin/galleries' && ($method === 'POST' || $method === 'PUT')) { echo json_encode(['gallery' => $this->admin->upsertGallery($input)]); return; }

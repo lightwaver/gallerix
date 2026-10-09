@@ -30,14 +30,17 @@ function UsersTab() {
   const payload = { username: form.username.trim(), roles: form.roles.split(',').map(s=>s.trim()).filter(Boolean) }
   if (form.password) payload.password = form.password // backend will hash server-side
     try {
-      // If password provided, let backend store as-is for MVP users.json (assume prehashed input)
       await adminApi.upsertUser(payload)
       setForm({ username: '', roles: '', password: '' })
       load()
     } catch (e) { setError(e.message) }
   }
 
-  const remove = async (u) => { if (confirm(`Delete ${u.username}?`)) { await adminApi.deleteUser(u.username); load() } }
+  const remove = async (u) => {
+    if (!confirm(`Delete ${u.username}?`)) return
+    setError('')
+    try { await adminApi.deleteUser(u.username); load() } catch (e) { setError(e.message) }
+  }
   const edit = (u) => {
     setForm({
       username: u.username || '',
@@ -70,7 +73,7 @@ function UsersTab() {
   <Input label="Password (optional)" placeholder="Enter new password" value={form.password} type="password" onChange={e=>setForm(f=>({...f, password:e.target.value}))} />
         <Button icon="save" type="submit">Add/Update</Button>
       </form>
-  <p style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Note: If provided, the password will be securely hashed on the server. Leave blank to keep the existing password unchanged.</p>
+  <p style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Note: Passwords need at least 8 characters and are hashed on the server. New users need a password; leave it blank to keep an existing password unchanged.</p>
     </div>
   )
 }
@@ -89,7 +92,7 @@ function RolesTab() {
 
   const save = async () => {
     setError('')
-    try { await adminApi.setRoles(roles) } catch (e) { setError(e.message) }
+    try { const r = await adminApi.setRoles(roles); setRoles(r.roles || roles) } catch (e) { setError(e.message) }
   }
 
   const removeRole = (perm, role) => {
@@ -168,7 +171,11 @@ function GalleriesTab() {
   const load = () => { adminApi.listGalleries().then(r=> setGals(r.galleries||[])).catch(e=> setError(e.message)) }
   useEffect(() => { load() }, [])
   const submit = async (e) => { e.preventDefault(); setError(''); try { await adminApi.upsertGallery(form); setForm(EMPTY_GALLERY); load() } catch(e){ setError(e.message) } }
-  const remove = async (g) => { if (confirm(`Delete ${g.name}?`)) { await adminApi.deleteGallery(g.name); load() } }
+  const remove = async (g) => {
+    if (!confirm(`Delete ${g.name}? All files of this gallery will be deleted.`)) return
+    setError('')
+    try { await adminApi.deleteGallery(g.name); load() } catch (e) { setError(e.message) }
+  }
   const edit = (g) => { setForm({ name:g.name || '', title:g.title || '', description:g.description || '', public: !!g.public, roles: g.roles || EMPTY_GALLERY.roles }) }
 
   const removeRole = (perm, role) => {

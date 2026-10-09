@@ -3,12 +3,17 @@ declare(strict_types=1);
 
 namespace Gallerix;
 
+use MicrosoftAzure\Storage\Blob\Models\AccessCondition;
+use MicrosoftAzure\Storage\Common\Exceptions\ServiceException;
+
 class ConfigLoader
 {
     private AzureClient $azure;
     private string $configContainer;
     /** Per-request memo; each config blob is fetched from Azure at most once per request. */
     private array $cache = [];
+    /** ETag of each blob as read in this request; writes are conditional on it (optimistic locking). */
+    private array $etags = [];
 
     public function __construct(AzureClient $azure)
     {
@@ -20,7 +25,9 @@ class ConfigLoader
     {
         if (isset($this->cache[$blobName])) return $this->cache[$blobName];
         $client = $this->azure->getBlobClient();
-        $content = $client->getBlob($this->configContainer, $blobName)->getContentStream();
+        $blob = $client->getBlob($this->configContainer, $blobName);
+        $this->etags[$blobName] = $blob->getProperties()->getETag();
+        $content = $blob->getContentStream();
         $json = stream_get_contents($content);
         if ($json === false) {
             throw new \RuntimeException("Failed to read blob $blobName");
@@ -36,8 +43,15 @@ class ConfigLoader
     public function roles(): array { return $this->getJson('roles.json'); }
     public function galleries(): array { return $this->getJson('galleries.json'); }
 
+    /**
+     * Writes a config blob only if nobody changed it since we read it in this request.
+     * @throws ConfigConflictException when another request wrote in between
+     */
     public function putJson(string $blobName, array $data): void
     {
+        if (!isset($this->etags[$blobName])) {
+            $this->getJson($blobName); // establishes the ETag to write against
+        }
         $client = $this->azure->getBlobClient();
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
@@ -45,7 +59,17 @@ class ConfigLoader
         }
         $opts = new \MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions();
         $opts->setContentType('application/json');
-        $client->createBlockBlob($this->configContainer, $blobName, $json, $opts);
+        $opts->setAccessConditions(AccessCondition::ifMatch($this->etags[$blobName]));
+        try {
+            $result = $client->createBlockBlob($this->configContainer, $blobName, $json, $opts);
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 412) {
+                unset($this->cache[$blobName], $this->etags[$blobName]);
+                throw new ConfigConflictException('The configuration was changed by someone else at the same time. Please reload and try again.');
+            }
+            throw $e;
+        }
+        $this->etags[$blobName] = $result->getETag();
         $this->cache[$blobName] = $data;
     }
 

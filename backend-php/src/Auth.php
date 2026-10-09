@@ -52,9 +52,18 @@ class Auth
                     $token = JWT::encode($payload, $this->jwtSecret, 'HS256');
                     return ['token' => $token, 'user' => ['username' => $username, 'roles' => $roles]];
                 }
+                return null;
             }
         }
+        // Unknown user: spend the same hashing time so response timing doesn't reveal valid usernames
+        password_verify($password, self::dummyHash());
         return null;
+    }
+
+    /** bcrypt (cost 12, like the users' hashes) of a random value nobody knows; only used to burn time. */
+    private static function dummyHash(): string
+    {
+        return '$2y$12$uoJJBQOvhQFl6E/p/nsLYuDcAltnJR1JJwVkxwFVlSPmV6NYrROfC';
     }
 
     public function requireAuth(): array
