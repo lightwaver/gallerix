@@ -24,7 +24,10 @@ use Dotenv\Dotenv;
 use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
+use Gallerix\Authorizer;
 use Gallerix\GalleryService;
+use Gallerix\MediaPolicy;
+use Gallerix\MediaSigner;
 
 // Load env
 $dotenv = Dotenv::createUnsafeImmutable(__DIR__ . '/..');
@@ -33,7 +36,7 @@ $dotenv->safeLoad();
 // Read inputs
 $gallery = isset($_GET['g']) ? (string)$_GET['g'] : '';
 $file = isset($_GET['f']) ? (string)$_GET['f'] : '';
-if ($gallery === '' || $file === '') {
+if (!MediaPolicy::isSafeSegment($gallery) || !MediaPolicy::isSafeSegment($file)) {
     http_response_code(400);
     echo 'Bad request';
     exit;
@@ -45,36 +48,15 @@ try {
     $auth = new Auth($config);
     $gals = new GalleryService($azure, $config);
 
-    // Extract token from Cookie, Authorization header, or query (?t=)
-    $token = null;
-    if (isset($_COOKIE['gallerix_token'])) {
-        $token = 'Bearer ' . $_COOKIE['gallerix_token'];
-    } elseif (!empty($_GET['t'])) {
-        $token = 'Bearer ' . (string)$_GET['t'];
-    } elseif (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
-        $token = (string)$_SERVER['HTTP_AUTHORIZATION'];
-    }
-
-    if ($token) {
-        // Temporarily inject header so requireAuth path works
-        $_SERVER['HTTP_AUTHORIZATION'] = $token;
-    }
-
     $gal = $gals->getGalleryByName($gallery);
-    if (!$gal) {
-        http_response_code(404);
-        echo 'Not found';
-        exit;
-    }
-    // If gallery is public, allow without auth; otherwise require token and check roles
-    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
-    if (!$isPublic) {
+    if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
+    // Access: public gallery, a valid signed URL (issued by the API after its permission check),
+    // or an Authorization header for API clients. Session tokens in cookies/query are no longer accepted.
+    $authz = new Authorizer($config);
+    $signed = (new MediaSigner())->verify($gallery, $file, (string)($_GET['e'] ?? ''), (string)($_GET['sig'] ?? ''));
+    if (!$signed && !Authorizer::isPublic($gal)) {
         $user = $auth->requireAuth();
-        if (!$auth->can($user, 'view', $gal)) {
-            http_response_code(403);
-            echo 'Forbidden';
-            exit;
-        }
+        if (!$authz->canGallery($user, Authorizer::VIEW, $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
     }
 
     // Fetch blob and stream
@@ -83,9 +65,10 @@ try {
     $blobName = rtrim($gallery, '/') . '/' . $file;
     $blob = $client->getBlob($container, $blobName);
     $props = $blob->getProperties();
-    $ct = $props->getContentType() ?: 'application/octet-stream';
     $len = $props->getContentLength();
 
+    // Only allowlisted media types are served inline; anything else (e.g. legacy HTML/SVG uploads) is forced to download
+    $ct = MediaPolicy::sendSafeMediaHeaders($props->getContentType(), $file);
     header('Content-Type: ' . $ct);
     if ($len !== null) header('Content-Length: ' . $len);
     header('Cache-Control: private, max-age=0, no-cache');

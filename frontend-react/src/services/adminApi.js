@@ -1,4 +1,4 @@
-import { getToken } from './auth.js'
+import { getToken, handleUnauthorized } from './auth.js'
 
 async function request(path, opts = {}) {
   const token = getToken()
@@ -10,6 +10,7 @@ async function request(path, opts = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     }
   })
+  if (res.status === 401 && token) handleUnauthorized()
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
   return res.json()
 }

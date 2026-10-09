@@ -1,7 +1,6 @@
 {
   "global": {
-    "view": ["admin", "member"],
-    "upload": ["admin"],
-    "admin": ["admin"]
+    "admin": ["admin"],
+    "createGallery": ["admin"]
   }
 }

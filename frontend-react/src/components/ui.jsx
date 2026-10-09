@@ -55,3 +55,15 @@ export function Tabs({ tabs, current, onChange }) {
     </div>
   )
 }
+
+export function Checkbox({ label, hint, ...props }) {
+  return (
+    <label style={{ display:'flex', gap:8, alignItems:'flex-start', cursor:'pointer' }}>
+      <input type="checkbox" {...props} style={{ marginTop: 3, accentColor: 'var(--ppo-primary)' }} />
+      <span>
+        <span>{label}</span>
+        {hint && <span style={{ display:'block', fontSize: 12, color:'var(--ppo-muted)' }}>{hint}</span>}
+      </span>
+    </label>
+  )
+}

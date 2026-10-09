@@ -5,52 +5,40 @@ namespace Gallerix;
 
 use MicrosoftAzure\Storage\Blob\Models\ListBlobsOptions;
 use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
+use MicrosoftAzure\Storage\Common\Exceptions\ServiceException;
 
 class GalleryService
 {
     private AzureClient $azure;
     private ConfigLoader $config;
     private string $dataContainer;
+    private MediaSigner $signer;
 
     public function __construct(AzureClient $azure, ConfigLoader $config)
     {
         $this->azure = $azure;
         $this->config = $config;
         $this->dataContainer = getenv('AZURE_CONTAINER_DATA') ?: 'data';
+        $this->signer = new MediaSigner();
     }
 
-    public function listGalleriesForUser(array $user): array
+    /**
+     * Gallery summaries for every gallery accepted by $filter (receives the normalized gallery).
+     * @param callable(array): bool $filter
+     */
+    public function listGalleries(callable $filter): array
     {
-        $galleries = $this->config->galleries();
         $result = [];
-        foreach ($galleries as $gal) {
-            $roles = $gal['roles']['view'] ?? [];
-            if ($this->userHasAnyRole($user, $roles)) {
-                $result[] = [
-                    'name' => $gal['name'],
-                    'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? '',
-                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'], $user['token'] ?? null)
-                ];
-            }
-        }
-        return $result;
-    }
-
-    public function listPublicGalleries(): array
-    {
-        $galleries = $this->config->galleries();
-        $result = [];
-        foreach ($galleries as $gal) {
-            $roles = $gal['roles']['view'] ?? [];
-            if (in_array('public', $roles, true)) {
-                $result[] = [
-                    'name' => $gal['name'],
-                    'title' => $gal['title'] ?? $gal['name'],
-                    'description' => $gal['description'] ?? '',
-                    'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
-                ];
-            }
+        foreach ($this->config->galleries() as $gal) {
+            $gal = Authorizer::normalizeGallery($gal);
+            if (!$filter($gal)) continue;
+            $result[] = [
+                'name' => $gal['name'],
+                'title' => $gal['title'] ?? $gal['name'],
+                'description' => $gal['description'] ?? '',
+                'public' => $gal['public'],
+                'coverUrl' => $this->buildGalleryCoverUrl($gal['name'])
+            ];
         }
         return $result;
     }
@@ -59,12 +47,12 @@ class GalleryService
     {
         $galleries = $this->config->galleries();
         foreach ($galleries as $gal) {
-            if (($gal['name'] ?? '') === $name) return $gal;
+            if (($gal['name'] ?? '') === $name) return Authorizer::normalizeGallery($gal);
         }
         return null;
     }
 
-    public function listItems(string $galleryName, ?string $token = null): array
+    public function listItems(string $galleryName): array
     {
         $client = $this->azure->getBlobClient();
         $prefix = rtrim($galleryName, '/') . '/';
@@ -72,21 +60,14 @@ class GalleryService
         $opts->setPrefix($prefix);
         $items = [];
         $result = $client->listBlobs($this->dataContainer, $opts);
-    $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
-    foreach ($result->getBlobs() as $blob) {
+        foreach ($result->getBlobs() as $blob) {
             $name = $blob->getName();
             if (str_ends_with($name, '/')) continue; // skip folders
             $file = substr($name, strlen($prefix));
             if ($file === '' || str_contains($file, '/')) continue; // only direct children
-            // Serve via auth-protected proxy endpoint image.php
-            $path = '/image.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
-            if ($token) {
-                $path .= '&t=' . rawurlencode($token);
-            }
-            $url = $publicBase ? ($publicBase . $path) : $path;
-            $thumbPath = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file);
-            if ($token) { $thumbPath .= '&t=' . rawurlencode($token); }
-            $thumbUrl = $publicBase ? ($publicBase . $thumbPath) : $thumbPath;
+            // Serve via proxy endpoints using short-lived signed URLs (no session token in URLs)
+            $url = $this->signer->url('image.php', $galleryName, $file);
+            $thumbUrl = $this->signer->url('thumb.php', $galleryName, $file);
             $mime = $blob->getProperties()->getContentType();
             $ctype = (string)$mime;
             $type = (str_starts_with($ctype, 'video')) ? 'video' : ((stripos($ctype, 'application/pdf') === 0) ? 'pdf' : 'image');
@@ -114,13 +95,76 @@ class GalleryService
             error_log('[Gallerix] Upload failed: ' . $msg);
             throw new \RuntimeException($msg);
         }
+        $filename = MediaPolicy::sanitizeFilename((string)($file['name'] ?? ''));
+        if ($filename === null) {
+            throw new \InvalidArgumentException('Invalid file name');
+        }
+        $type = MediaPolicy::detectType((string)$file['tmp_name'], $filename);
+        if (!MediaPolicy::isAllowedType($type)) {
+            throw new \InvalidArgumentException('File type not allowed' . ($type ? " ($type)" : ''));
+        }
         $client = $this->azure->getBlobClient();
-        $blobName = rtrim($galleryName, '/') . '/' . $file['name'];
+        $prefix = rtrim($galleryName, '/') . '/';
+        $filename = $this->uniqueFilename($prefix, $filename);
         $options = new CreateBlockBlobOptions();
-        if (!empty($file['type'])) $options->setContentType($file['type']);
+        $options->setContentType($type);
         $content = fopen($file['tmp_name'], 'rb');
-        $client->createBlockBlob($this->dataContainer, $blobName, $content, $options);
-        return ['ok' => true, 'name' => $file['name']];
+        $client->createBlockBlob($this->dataContainer, $prefix . $filename, $content, $options);
+        return ['ok' => true, 'name' => $filename];
+    }
+
+    /** Appends " (n)" before the extension until the name does not collide with an existing blob. */
+    private function uniqueFilename(string $prefix, string $filename): string
+    {
+        $ext = pathinfo($filename, PATHINFO_EXTENSION);
+        $base = pathinfo($filename, PATHINFO_FILENAME);
+        $candidate = $filename;
+        for ($i = 1; $this->blobExists($prefix . $candidate); $i++) {
+            if ($i > 1000) throw new \RuntimeException('Could not find a free file name');
+            $candidate = $base . " ($i)" . ($ext !== '' ? '.' . $ext : '');
+        }
+        return $candidate;
+    }
+
+    private function blobExists(string $blobName): bool
+    {
+        try {
+            $this->azure->getBlobClient()->getBlobProperties($this->dataContainer, $blobName);
+            return true;
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 404) return false;
+            throw $e;
+        }
+    }
+
+    /**
+     * Deletes one file and its cached thumbnail/preview. Returns false if the file does not exist.
+     */
+    public function deleteItem(string $galleryName, string $file): bool
+    {
+        $client = $this->azure->getBlobClient();
+        $blobName = rtrim($galleryName, '/') . '/' . $file;
+        try {
+            $client->deleteBlob($this->dataContainer, $blobName);
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 404) return false;
+            throw $e;
+        }
+        $thumbsContainer = getenv('AZURE_CONTAINER_THUMBS') ?: 'thumbs';
+        foreach ([$blobName, self::previewBlobName($blobName), 'preview/' . $blobName] as $thumb) {
+            try { $client->deleteBlob($thumbsContainer, $thumb); }
+            catch (ServiceException $e) { if ($e->getCode() !== 404) error_log('[Gallerix] delete thumb failed: ' . $thumb . ' - ' . $e->getMessage()); }
+        }
+        return true;
+    }
+
+    /** Name of the cached preview-size image in the thumbs container: "dir/file_preview.ext". */
+    public static function previewBlobName(string $blobName): string
+    {
+        $dot = strrpos($blobName, '.');
+        $slash = strrpos($blobName, '/');
+        if ($dot === false || ($slash !== false && $dot < $slash)) return $blobName . '_preview';
+        return substr($blobName, 0, $dot) . '_preview' . substr($blobName, $dot);
     }
 
     /**
@@ -168,19 +212,10 @@ class GalleryService
         };
     }
 
-    private function userHasAnyRole(array $user, array $roles): bool
-    {
-        $userRoles = $user['roles'] ?? [];
-        foreach ($userRoles as $r) {
-            if (in_array($r, $roles, true)) return true;
-        }
-        return false;
-    }
-
     /**
      * Returns a preview-sized cover URL for the first image in the gallery, or null if none.
      */
-    private function buildGalleryCoverUrl(string $galleryName, ?string $authToken = null): ?string
+    private function buildGalleryCoverUrl(string $galleryName): ?string
     {
         try {
             $client = $this->azure->getBlobClient();
@@ -198,10 +233,7 @@ class GalleryService
                     if ($file === '' || str_contains($file, '/')) continue; // only direct children
                     $mime = (string)$blob->getProperties()->getContentType();
                     if (str_starts_with($mime, 'image')) {
-                        $publicBase = rtrim((string)(getenv('PUBLIC_BASE_URL') ?: ''), '/');
-                        $path = '/thumb.php?g=' . rawurlencode($galleryName) . '&f=' . rawurlencode($file) . '&s=preview';
-                        if (!empty($authToken)) { $path .= '&t=' . rawurlencode($authToken); }
-                        return $publicBase ? ($publicBase . $path) : $path;
+                        return $this->signer->url('thumb.php', $galleryName, $file, ['s' => 'preview']);
                     }
                 }
                 $cont = $result->getContinuationToken();

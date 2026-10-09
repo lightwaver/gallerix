@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, resolveUrl } from '../services/api.js'
-import { Card, Grid, Button, Input } from '../components/ui.jsx'
+import { Card, Grid, Button, Input, Checkbox } from '../components/ui.jsx'
 
 export default function GalleryList() {
   const [galleries, setGalleries] = useState([])
@@ -15,6 +15,7 @@ export default function GalleryList() {
   const [newRolesView, setNewRolesView] = useState('')
   const [newRolesUpload, setNewRolesUpload] = useState('')
   const [newRolesAdmin, setNewRolesAdmin] = useState('')
+  const [newPublic, setNewPublic] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -80,17 +81,18 @@ export default function GalleryList() {
               <label style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Description (optional)</label>
               <Input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Short description" />
               <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                <label style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Roles (optional, comma separated)</label>
-                <Input value={newRolesView} onChange={e => setNewRolesView(e.target.value)} placeholder="View: e.g. admin,member" />
-                <Input value={newRolesUpload} onChange={e => setNewRolesUpload(e.target.value)} placeholder="Upload: e.g. admin,member" />
-                <Input value={newRolesAdmin} onChange={e => setNewRolesAdmin(e.target.value)} placeholder="Admin: e.g. admin" />
+                <Checkbox label="Public" hint="Viewable without login." checked={newPublic} onChange={e => setNewPublic(e.target.checked)} />
+                <label style={{ fontSize: 12, color: 'var(--ppo-muted)' }}>Additional access (optional, comma separated roles or @username). Your roles can view and upload, you manage the gallery.</label>
+                <Input value={newRolesView} onChange={e => setNewRolesView(e.target.value)} placeholder="View: e.g. family, friends" />
+                <Input value={newRolesUpload} onChange={e => setNewRolesUpload(e.target.value)} placeholder="Upload: e.g. family" />
+                <Input value={newRolesAdmin} onChange={e => setNewRolesAdmin(e.target.value)} placeholder="Manage: e.g. @bob" />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                 <Button onClick={() => setShowAdd(false)} variant="secondary">Cancel</Button>
                 <Button disabled={saving || (!newTitle && !newName)} onClick={async () => {
                   setSaving(true)
                   try {
-                    const payload = { title: newTitle, name: newName, description: newDesc }
+                    const payload = { title: newTitle, name: newName, description: newDesc, public: newPublic }
                     const rv = newRolesView.split(',').map(s => s.trim()).filter(Boolean)
                     const ru = newRolesUpload.split(',').map(s => s.trim()).filter(Boolean)
                     const ra = newRolesAdmin.split(',').map(s => s.trim()).filter(Boolean)
@@ -107,7 +109,7 @@ export default function GalleryList() {
                     setCanCreate(!!r.canCreate)
                     setShowAdd(false)
                     setNewTitle(''); setNewName(''); setNewDesc('')
-                    setNewRolesView(''); setNewRolesUpload(''); setNewRolesAdmin('')
+                    setNewRolesView(''); setNewRolesUpload(''); setNewRolesAdmin(''); setNewPublic(false)
                   } catch (e) {
                     setError(e.message)
                   } finally {

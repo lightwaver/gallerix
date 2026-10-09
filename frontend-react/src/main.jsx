@@ -7,6 +7,7 @@ import GalleryList from './pages/GalleryList.jsx'
 import GalleryView from './pages/GalleryView.jsx'
 import Settings from './pages/Settings.jsx'
 import { getToken, getUser, setAuth, clearAuth } from './services/auth.js'
+import { api } from './services/api.js'
 
 
 function applyAuthClass() {
@@ -33,7 +34,7 @@ function AppLayout({ children }) {
               <span className="material-symbols-outlined" style={{ fontSize:18 }}>collections</span>
               <span className="mobileHidden">Galleries</span>
             </NavLink>
-            {user?.roles?.includes('admin') && (
+            {user?.isAdmin && (
               <NavLink to="/settings" className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
                 <span className="material-symbols-outlined" style={{ fontSize:18 }}>settings</span>
                 <span className="mobileHidden">Settings</span>
@@ -45,7 +46,7 @@ function AppLayout({ children }) {
               <>
                 <span className="material-symbols-outlined" title="User">account_circle</span>
                 <span>{user.username}</span>
-                <Button variant="outline" icon="logout" onClick={() => { clearAuth(); navigate('/login') }}>
+                <Button variant="outline" icon="logout" onClick={() => { api.logout().catch(() => {}); clearAuth(); navigate('/login') }}>
                   <span className='mobileHidden'>Logout</span>
                   </Button>
               </>

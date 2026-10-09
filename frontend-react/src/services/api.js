@@ -1,4 +1,4 @@
-import { getToken } from './auth.js'
+import { getToken, handleUnauthorized } from './auth.js'
 
 let runtimeConfigPromise
 async function getRuntimeConfig() {
@@ -26,6 +26,7 @@ async function request(path, opts = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   }
   const res = await fetch(url, { ...opts, headers })
+  if (res.status === 401 && token && path !== '/login') handleUnauthorized()
   if (!res.ok) {
     let err
     try { err = await res.json() } catch { err = { error: res.statusText } }
@@ -41,6 +42,8 @@ export const api = {
 
   me: () => request('/me'),
 
+  logout: () => request('/logout', { method: 'POST' }),
+
   listGalleries: () => request('/galleries'),
 
   createGallery: (payload) =>
@@ -48,6 +51,13 @@ export const api = {
 
   listItems: (name) =>
     request(`/galleries/${encodeURIComponent(name)}/items`),
+
+  // Gallery managers: title, description, public, roles ({ view, upload, admin })
+  updateGallery: (name, changes) =>
+    request(`/galleries/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+
+  deleteItem: (name, file) =>
+    request(`/galleries/${encodeURIComponent(name)}/items/${encodeURIComponent(file)}`, { method: 'DELETE' }),
 
   // Upload with optional progress callback (onProgress receives percent 0-100)
   upload: (name, file, onProgress) => new Promise(async (resolve, reject) => {
@@ -75,6 +85,7 @@ export const api = {
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
+        if (xhr.status === 401 && token) handleUnauthorized()
         if (xhr.status >= 200 && xhr.status < 300) {
           try { resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {}) } catch { resolve({}) }
         } else {

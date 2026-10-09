@@ -12,7 +12,10 @@ use Dotenv\Dotenv;
 use Gallerix\AzureClient;
 use Gallerix\ConfigLoader;
 use Gallerix\Auth;
+use Gallerix\Authorizer;
 use Gallerix\GalleryService;
+use Gallerix\MediaPolicy;
+use Gallerix\MediaSigner;
 use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
 
 // Load env
@@ -34,11 +37,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 
 $gallery = isset($_GET['g']) ? (string)$_GET['g'] : '';
 $file = isset($_GET['f']) ? (string)$_GET['f'] : '';
-if ($gallery === '' || $file === '') {
+if (!MediaPolicy::isSafeSegment($gallery) || !MediaPolicy::isSafeSegment($file)) {
     http_response_code(400);
     echo 'Bad request';
     exit;
 }
+// Thumbnails are always raster images we generated; still forbid sniffing and active content
+MediaPolicy::sendSafeMediaHeaders('image/jpeg', $file);
 
 try {
     $azure = new AzureClient();
@@ -46,23 +51,15 @@ try {
     $auth = new Auth($config);
     $gals = new GalleryService($azure, $config);
 
-    // Token via cookie/header/query
-    $token = null;
-    if (isset($_COOKIE['gallerix_token'])) {
-        $token = 'Bearer ' . $_COOKIE['gallerix_token'];
-    } elseif (!empty($_GET['t'])) {
-        $token = 'Bearer ' . (string)$_GET['t'];
-    } elseif (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
-        $token = (string)$_SERVER['HTTP_AUTHORIZATION'];
-    }
-    if ($token) { $_SERVER['HTTP_AUTHORIZATION'] = $token; }
-
     $gal = $gals->getGalleryByName($gallery);
     if (!$gal) { http_response_code(404); echo 'Not found'; exit; }
-    $isPublic = in_array('public', ($gal['roles']['view'] ?? []), true);
-    if (!$isPublic) {
+    // Access: public gallery, a valid signed URL (issued by the API after its permission check),
+    // or an Authorization header for API clients. Session tokens in cookies/query are no longer accepted.
+    $authz = new Authorizer($config);
+    $signed = (new MediaSigner())->verify($gallery, $file, (string)($_GET['e'] ?? ''), (string)($_GET['sig'] ?? ''));
+    if (!$signed && !Authorizer::isPublic($gal)) {
         $user = $auth->requireAuth();
-        if (!$auth->can($user, 'view', $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
+        if (!$authz->canGallery($user, Authorizer::VIEW, $gal)) { http_response_code(403); echo 'Forbidden'; exit; }
     }
 
     $client = $azure->getBlobClient();
@@ -72,14 +69,7 @@ try {
     // Size selector: default 'thumb', optional 'preview' uses PREVIEW_MAX_SIZE and a different cache name
     $sizeParam = isset($_GET['s']) ? (string)$_GET['s'] : 'thumb';
     $isPreview = ($sizeParam === 'preview');
-    // build suffix name for preview: file_preview.ext
-    $suffixName = $blobName;
-    if ($isPreview) {
-        $dot = strrpos($blobName, '.');
-        if ($dot === false) { $suffixName = $blobName . '_preview'; }
-        else { $suffixName = substr($blobName, 0, $dot) . '_preview' . substr($blobName, $dot); }
-    }
-    $thumbName = $isPreview ? $suffixName : $blobName;
+    $thumbName = $isPreview ? GalleryService::previewBlobName($blobName) : $blobName;
 
     // Try to serve existing thumb (new naming). If not found, try legacy preview/ prefix and copy to new name.
     try {

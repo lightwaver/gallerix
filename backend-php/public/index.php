@@ -14,7 +14,7 @@ use Dotenv\Dotenv;
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Authorization, Content-Type');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -27,6 +27,9 @@ $dotenv->safeLoad();
 $router = new Router();
 try {
     $router->handle($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);
+} catch (InvalidArgumentException $e) {
+    http_response_code(400);
+    echo json_encode(['error' => $e->getMessage()]);
 } catch (Throwable $e) {
     error_log('[Gallerix] Unhandled: ' . $e->getMessage());
     http_response_code(500);
